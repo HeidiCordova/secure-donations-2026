@@ -175,13 +175,7 @@ Resources:
   HealthFunction:
     Type: AWS::Serverless::Function
     Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Target: es2023
-        Format: cjs
-        Sourcemap: true
-        EntryPoints:
-          - src/handlers/health.ts
+      BuildMethod: makefile
     Properties:
       CodeUri: ../backend
       Handler: health.handler
@@ -204,13 +198,7 @@ Resources:
   WhoAmIFunction:
     Type: AWS::Serverless::Function
     Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Target: es2023
-        Format: cjs
-        Sourcemap: true
-        EntryPoints:
-          - src/handlers/whoami.ts
+      BuildMethod: makefile
     Properties:
       CodeUri: ../backend
       Handler: whoami.handler
