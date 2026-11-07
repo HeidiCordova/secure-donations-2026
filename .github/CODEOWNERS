@@ -1,0 +1,9 @@
+# Dueños por capa (ver plan de trabajo). Reemplazar los comentarios con los usuarios de GitHub.
+/infra/                 @HeidiCordova
+/.github/               @HeidiCordova
+/backend/src/authz/     @HeidiCordova
+/policies/              @HeidiCordova
+# /backend/             @usuario-de-maria
+# /frontend/            @usuario-de-rodrigo
+# /tests/               @usuario-de-barbara
+# /evidence/            @usuario-de-barbara
