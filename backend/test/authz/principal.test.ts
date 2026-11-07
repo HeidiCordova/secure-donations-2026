@@ -4,6 +4,7 @@ import {
   parseListClaim,
   requireGroup,
   requireOwner,
+  requireScope,
   type JwtAuthorizedEvent,
 } from '../../src/authz/principal.js';
 import { AppError } from '../../src/shared/errors.js';
@@ -102,5 +103,17 @@ describe('requireOwner (CA-07.2, anti-BOLA)', () => {
   it('otro usuario recibe NOT_FOUND sin revelar el recurso', () => {
     expectAppError(() => requireOwner(principal, 'user-999'), 'NOT_FOUND');
     expectAppError(() => requireOwner(principal, undefined), 'NOT_FOUND');
+  });
+});
+
+describe('requireScope (CA-NF02.1)', () => {
+  const principal = getPrincipal(eventWith({ ...baseClaims, 'cognito:groups': '[DONANTE]' }));
+
+  it('acepta un scope presente en el token', () => {
+    expect(() => requireScope(principal, 'api/donations.write')).not.toThrow();
+  });
+
+  it('rechaza un scope ausente con FORBIDDEN', () => {
+    expectAppError(() => requireScope(principal, 'api/projects.write'), 'FORBIDDEN');
   });
 });

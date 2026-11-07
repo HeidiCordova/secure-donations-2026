@@ -86,6 +86,15 @@ export function requireGroup(principal: Principal, group: Group): void {
  * Ownership (anti-BOLA, CA-07.2): si el recurso no es del solicitante se responde 404,
  * para no revelar que existe.
  */
+/**
+ * Defensa en profundidad (CA-NF02.1): API Gateway ya exige el scope de la ruta (PEP),
+ * pero Lambda lo vuelve a verificar por si una ruta queda mal configurada.
+ */
+export function requireScope(principal: Principal, scope: string): void {
+  if (!principal.scopes.includes(scope)) {
+    throw new AppError('FORBIDDEN', 'No tiene permisos para esta operación');
+  }
+}
 export function requireOwner(principal: Principal, resourceOwnerSub: string | undefined): void {
   if (resourceOwnerSub === undefined || resourceOwnerSub !== principal.sub) {
     throw new AppError('NOT_FOUND', 'Recurso no encontrado');
