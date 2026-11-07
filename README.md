@@ -47,6 +47,12 @@ npm run build
 - **Credenciales:** sin access keys de larga duración. Los despliegues se ejecutan desde AWS CloudShell (credenciales temporales; SAM CLI preinstalado).
 - **Equipo en AWS:** la nueva experiencia no permite usuarios IAM con acceso a consola y da acceso de administrador a todo miembro invitado. Por mínimo privilegio solo se invita a quien lo necesita; el resto trabaja contra la URL del API. Ver informe (adaptación de CA-NF03.3).
 
+**Fuentes (documentación oficial de AWS):**
+
+- [Comparación de tipos de registro](https://docs.aws.amazon.com/accounts/latest/reference/sign-up-for-aws.html): en la nueva experiencia no se crea usuario root, los usuarios IAM son solo para acceso programático y la región se asigna automáticamente sin poder cambiarse.
+- [Servicios soportados en la nueva experiencia](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html): Lambda, API Gateway, DynamoDB, Cognito, S3, CloudFront, CloudWatch, CloudFormation, IAM, CloudTrail, Verified Permissions y Budgets están en el Free Tier.
+- [Registro de MFA en AWS Settings](https://docs.aws.amazon.com/accounts/latest/reference/register-mfa-devices.html): MFA TOTP sobre el AWS Builder ID.
+- Evidencia: [`evidence/cuenta-aws/`](./evidence/cuenta-aws/)
 ## Despliegue
 
 _Pendiente (día 2): `sam build` y `sam deploy` desde CloudShell._
