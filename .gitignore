@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+.aws-sam/
+*.log
+
+# Secretos y configuración local: nunca al repo
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editor / SO
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
