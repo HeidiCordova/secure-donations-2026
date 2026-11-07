@@ -53,6 +53,7 @@ npm run build
 - [Servicios soportados en la nueva experiencia](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html): Lambda, API Gateway, DynamoDB, Cognito, S3, CloudFront, CloudWatch, CloudFormation, IAM, CloudTrail, Verified Permissions y Budgets están en el Free Tier.
 - [Registro de MFA en AWS Settings](https://docs.aws.amazon.com/accounts/latest/reference/register-mfa-devices.html): MFA TOTP sobre el AWS Builder ID.
 - Evidencia: [`evidence/cuenta-aws/`](./evidence/cuenta-aws/)
+
 ## Despliegue
 
 _Pendiente (día 2): `sam build` y `sam deploy` desde CloudShell._
