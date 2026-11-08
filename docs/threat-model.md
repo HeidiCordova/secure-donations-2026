@@ -1,25 +1,9 @@
 # Modelo de Amenazas (STRIDE) - Secure Donations 2026
 
-## 1. Spoofing (Suplantación de Identidad)
-* **Amenaza:** Un atacante suplanta la identidad de un donante o un gestor.
-* **Mitigación:** Autenticación centralizada con Amazon Cognito usando flujo OAuth2 + PKCE. Uso de tokens JWT firmados digitalmente.
-
-## 2. Tampering (Manipulación de Datos)
-* **Amenaza:** Modificación del monto a donar (`amountCents`) durante la transmisión o alteración de tokens JWT.
-* **Mitigación:** Encriptación TLS en tránsito (HTTPS). Validación estricta de esquemas Zod en backend (`amountCents` restringido entre 100 y 100000). Verificación de firma del JWT en API Gateway / Lambda Authorizer.
-
-## 3. Repudiation (Repudio)
-* **Amenaza:** Un gestor niega haber publicado un proyecto o modificado información sensible.
-* **Mitigación:** Registro obligatorio de `AuditEvent` en logs/DynamoDB ante acciones críticas (crear/publicar proyecto, procesar donaciones).
-
-## 4. Information Disclosure (Fuga de Información)
-* **Amenaza:** Acceso no autorizado a donaciones privadas de otros usuarios (Vulnerabilidad BOLA / IDOR).
-* **Mitigación:** Endpoint anti-BOLA `GET /v1/donations/{donationId}` que valida en backend que el `userId` del JWT coincida con el propietario del registro.
-
-## 5. Denial of Service (Denegación de Servicio)
-* **Amenaza:** Inundación de solicitudes para procesar la misma donación múltiples veces.
-* **Mitigación:** Implementación del patrón de Idempotencia mediante el encabezado `Idempotency-Key` respaldado por DynamoDB con `TransactWriteItems`.
-
-## 6. Elevation of Privilege (Elevación de Privilegios)
-* **Amenaza:** Un donante común intenta crear o publicar proyectos (funcionalidad de Gestor).
-* **Mitigación:** Control de acceso basado en roles (RBAC) validando los *groups/scopes* del token JWT en la capa de autorización.
+| Componente | Categoría STRIDE | Amenaza Identificada | Control Existente / Mitigación | Criterio de Aceptación (CA) | Prueba Asociada |
+|---|---|---|---|---|---|
+| **CloudFront / S3** | Information Disclosure | Acceso público no autorizado a los assets del SPA o almacenamiento S3. | Habilitación de OAC (Origin Access Control), políticas de bucket estrictas y cabeceras de seguridad (CSP, HSTS). | CA-NF01.1, CA-NF11.2 | T10 |
+| **Cognito** | Spoofing / Elevation of Privilege | Suplantación de identidad o robo de cuentas administrativas. | Flujo OAuth2 con PKCE obligatorio, tokens de corta duración (≤15 min) y MFA TOTP obligatorio para GESTOR y AUDITOR. | CA-03.1, CA-03.3, CA-11.1 | T14 |
+| **API Gateway** | Spoofing / Denial of Service | Envío de peticiones malformadas, suplantación con ID tokens o ataques de denegación de servicio (DoS). | JWT Authorizer nativo de API Gateway (validación estricta de firma y scopes). Throttling configurado (20 rps / 10 burst) y alerta en AWS Budgets. | CA-03.2, CA-NF09.1 | T02, T11 |
+| **Lambda** | Elevation of Privilege / Tampering | Ejecución de operaciones privilegiadas no autorizadas por funciones Lambda. | Principio de mínimo privilegio en roles IAM por función (ej. listado sin permisos de escritura). | CA-NF03.1 | T03, T10, T12 |
+| **DynamoDB** | Tampering / Information Disclosure | Modificación indebida de montos, vulnerabilidades BOLA en historial o duplicidad de donaciones. | Validación de esquemas con Zod (`amountCents` 100–100000), endpoint anti-BOLA y control de idempotencia atómica con `TransactWriteItems`. | CA-05.1, CA-07.2, CA-NF04.2 | T04, T05, T06, T07, T09 |
