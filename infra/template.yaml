@@ -41,7 +41,9 @@ Resources:
       # Solo usuarios de prueba creados por el equipo (CA-NF10.1)
       AdminCreateUserConfig:
         AllowAdminCreateUserOnly: true
-      # MFA TOTP; obligatorio para GESTOR y AUDITOR (CA-11.1). Nunca SMS.
+      # MFA TOTP opcional a nivel de pool (Cognito no lo configura por grupo).
+      # Obligatorio para GESTOR y AUDITOR mediante control compensatorio:
+      # TOTP preferido por usuario + scripts/check-mfa.sh (CA-11.1, T14). Nunca SMS.
       MfaConfiguration: 'OPTIONAL'
       EnabledMfas: [SOFTWARE_TOKEN_MFA]
       Policies:
