@@ -135,6 +135,8 @@ Resources:
         - api/donations.write
         - api/donations.read
         - api/audit.read
+        # Permite que el propio usuario enrole su TOTP (associate/verify-software-token)
+        - aws.cognito.signin.user.admin
       SupportedIdentityProviders: [COGNITO]
       CallbackURLs:
         - !Sub ${LocalOrigin}/callback
