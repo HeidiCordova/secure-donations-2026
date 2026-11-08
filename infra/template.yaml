@@ -141,6 +141,112 @@ Resources:
       PreventUserExistenceErrors: ENABLED
 
   # ---------------------------------------------------------------------------
+  # Persistencia: DynamoDB on-demand (design.md §5)
+  # Cifrado en reposo por defecto con clave propiedad de AWS (sin costo extra).
+  # ---------------------------------------------------------------------------
+  ProjectsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub aqp-solidaria-${Stage}-projects
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: projectId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: projectId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: status-createdAt
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: project
+          Value: aqp-solidaria
+        - Key: stage
+          Value: !Ref Stage
+
+  DonationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub aqp-solidaria-${Stage}-donations
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: donationId
+          AttributeType: S
+        - AttributeName: donorSub
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: donationId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: donorSub-createdAt
+          KeySchema:
+            - AttributeName: donorSub
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: project
+          Value: aqp-solidaria
+        - Key: stage
+          Value: !Ref Stage
+
+  # pk = donorSub#createDonation#idempotencyKey; expira a las 24 h (CA-05.4)
+  IdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub aqp-solidaria-${Stage}-idempotency
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: project
+          Value: aqp-solidaria
+        - Key: stage
+          Value: !Ref Stage
+
+  # PK eventType, SK sk = timestamp#eventId: filtros por tipo y fecha (HU-10)
+  AuditEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub aqp-solidaria-${Stage}-audit-events
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: eventType
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: eventType
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: project
+          Value: aqp-solidaria
+        - Key: stage
+          Value: !Ref Stage
+  # ---------------------------------------------------------------------------
   # Policy Enforcement Point: API Gateway HTTP API con JWT authorizer
   # ---------------------------------------------------------------------------
   HttpApi:
