@@ -4,7 +4,7 @@ Fecha: 2026-11-08 · Región: us-east-2 · Ejecutado por: Heidi desde AWS CloudS
 Datos sanitizados: host del API reemplazado y `donorSub` enmascarado; no se muestran tokens ni emails.
 Usuarios: `donante1` y `donante2` (grupo DONANTE), `gestor1` (grupo GESTOR).
 
-## T04 — intención de donación (HU-05)
+## T05 — intención de donación válida (HU-05)
 
 ```text
 POST /v1/donations  Idempotency-Key: <uuid-1>  {"projectId":"22a333fb-…","amountCents":5000}
@@ -34,7 +34,7 @@ HTTP/2 409
 | Caso | Esperado | Obtenido |
 | --- | --- | --- |
 | Sin `Idempotency-Key` | 400 | 400 |
-| `amountCents: 50` (mínimo 100) | 400 | 400 |
+| T04: `amountCents: 50` (mínimo 100) | 400 | 400 |
 | Campo extra `donorSub` en el body | 400 | 400 |
 | Proyecto inexistente | 404 | 404 |
 | Proyecto en BORRADOR | 409 | 409 |
