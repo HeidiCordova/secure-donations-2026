@@ -332,6 +332,162 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${WhoAmIFunction}
       RetentionInDays: 14
 
+  # ---------------------------------------------------------------------------
+  # Módulo projects (HU-01, HU-02, HU-08, HU-09). Un rol IAM por función con
+  # solo las acciones y tablas que necesita (CA-NF03.1, T10).
+  # ---------------------------------------------------------------------------
+  ListProjectsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: projects-list.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: dynamodb:Query
+              Resource: !Sub '${ProjectsTable.Arn}/index/status-createdAt'
+      Events:
+        ListProjects:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/projects
+            Method: GET
+            Auth:
+              Authorizer: NONE
+  ListProjectsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ListProjectsFunction}
+      RetentionInDays: 14
+
+  GetProjectFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: projects-get.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: dynamodb:GetItem
+              Resource: !GetAtt ProjectsTable.Arn
+      Events:
+        GetProject:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/projects/{projectId}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+  GetProjectLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${GetProjectFunction}
+      RetentionInDays: 14
+
+  ProjectStatsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: projects-stats.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: dynamodb:GetItem
+              Resource: !GetAtt ProjectsTable.Arn
+      Events:
+        ProjectStats:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/projects/{projectId}/stats
+            Method: GET
+            Auth:
+              Authorizer: NONE
+  ProjectStatsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ProjectStatsFunction}
+      RetentionInDays: 14
+
+  CreateProjectFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: projects-create.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            # Proyecto + AuditEvent en un solo TransactWriteItems (CA-08.3)
+            - Effect: Allow
+              Action: dynamodb:PutItem
+              Resource:
+                - !GetAtt ProjectsTable.Arn
+                - !GetAtt AuditEventsTable.Arn
+      Events:
+        CreateProject:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/projects
+            Method: POST
+            Auth:
+              Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - api/projects.write
+  CreateProjectLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${CreateProjectFunction}
+      RetentionInDays: 14
+
+  PublishProjectFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: projects-publish.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ProjectsTable.Arn
+            - Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt AuditEventsTable.Arn
+      Events:
+        PublishProject:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/projects/{projectId}/publish
+            Method: PATCH
+            Auth:
+              Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - api/projects.write
+  PublishProjectLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${PublishProjectFunction}
+      RetentionInDays: 14
+
 Outputs:
   Region:
     Value: !Ref AWS::Region

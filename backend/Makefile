@@ -12,3 +12,18 @@ build-HealthFunction:
 
 build-WhoAmIFunction:
 > $(ESBUILD) src/handlers/whoami.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/whoami.mjs
+
+build-ListProjectsFunction:
+> $(ESBUILD) src/handlers/projects-list.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/projects-list.mjs
+
+build-GetProjectFunction:
+> $(ESBUILD) src/handlers/projects-get.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/projects-get.mjs
+
+build-ProjectStatsFunction:
+> $(ESBUILD) src/handlers/projects-stats.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/projects-stats.mjs
+
+build-CreateProjectFunction:
+> $(ESBUILD) src/handlers/projects-create.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/projects-create.mjs
+
+build-PublishProjectFunction:
+> $(ESBUILD) src/handlers/projects-publish.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/projects-publish.mjs
