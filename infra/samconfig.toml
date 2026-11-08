@@ -6,6 +6,7 @@ stack_name = "aqp-solidaria-academic"
 [default.build.parameters]
 cached = true
 parallel = true
+build_in_source = true
 
 [default.deploy.parameters]
 region = "us-east-2"

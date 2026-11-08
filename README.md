@@ -61,8 +61,12 @@ Desde AWS CloudShell (región `us-east-2`, SAM CLI preinstalado, sin llaves de a
 ```bash
 git clone -b main https://github.com/HeidiCordova/secure-donations-2026.git
 cd secure-donations-2026/infra
+cd secure-donations-2026
+npm ci
+cd infra
 sam build
 sam deploy
+
 ```
 
 - Las Lambdas se compilan con `backend/Makefile` (esbuild) en lugar del builder esbuild de SAM, que falla con los workspaces de npm.
