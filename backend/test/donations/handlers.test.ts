@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { pseudonymize, type AuditEvent, type AuditLog } from '../../src/audit/audit.js';
 import { makeDonationHandlers } from '../../src/donations/handlers.js';
 import type { IdempotencyRecord } from '../../src/donations/idempotency.js';
-import type { CreateDonationWrite, DonationRepository } from '../../src/donations/repository.js';
+import type { CreateDonationWrite, DonationRepository, SimulateDonationWrite } from '../../src/donations/repository.js';
 import { AppError } from '../../src/shared/errors.js';
 import type { ApiEvent } from '../../src/shared/event.js';
 import type { Donation, Project } from '../../src/shared/schemas.js';
@@ -69,6 +69,23 @@ class InMemoryDonations implements DonationRepository {
   getDonation(donationId: string) {
     return Promise.resolve(this.donations.get(donationId));
   }
+
+  /** Comprobación y escritura en el mismo paso, como la transacción condicionada de DynamoDB. */
+  simulateDonation({ donation, outcome, updatedAt, audit }: SimulateDonationWrite) {
+    const current = this.donations.get(donation.donationId);
+    if (!current || current.status !== 'PENDIENTE_SIMULACION' || current.donorSub !== donation.donorSub) {
+      return Promise.reject(new AppError('INVALID_TRANSITION', 'La donación ya no está pendiente'));
+    }
+    const updated: Donation = { ...current, status: outcome, updatedAt };
+    this.donations.set(updated.donationId, updated);
+    if (outcome === 'CONFIRMADA_SIMULADA') {
+      const p = this.projects.get(current.projectId);
+      if (p)
+        this.projects.set(p.projectId, { ...p, confirmedAmountCents: p.confirmedAmountCents + current.amountCents });
+    }
+    this.audits.push(audit);
+    return Promise.resolve(updated);
+  }
 }
 
 class MemoryAudit implements AuditLog {
@@ -79,13 +96,14 @@ class MemoryAudit implements AuditLog {
   }
 }
 
-function setup() {
+function setup(stage = 'academic') {
   const repo = new InMemoryDonations([project({}), project({ projectId: DRAFT_ID, status: 'BORRADOR' })]);
   const audit = new MemoryAudit();
   let counter = 0;
   const handlers = makeDonationHandlers({
     donations: repo,
     audit,
+    stage,
     now: () => NOW,
     newId: () => `aaaaaaaa-aaaa-4aaa-8aaa-${String(++counter).padStart(12, '0')}`,
   });
@@ -350,5 +368,100 @@ describe('GET /v1/donations/{donationId} (CA-07.2, T09)', () => {
   it('un GESTOR recibe 403 (T12)', async () => {
     const { handlers } = setup();
     expect((await handlers.get(event({ claims: gestor, donationId: MISSING_ID }))).statusCode).toBe(403);
+  });
+});
+
+describe('POST /v1/donations/{donationId}/simulate (HU-06)', () => {
+  async function pendingDonation(ctx: ReturnType<typeof setup>, who = ana, key = KEY): Promise<Donation> {
+    const response = await ctx.handlers.create(event({ claims: who, body: validBody, key }));
+    return JSON.parse(response.body) as Donation;
+  }
+
+  it('confirmar pasa a CONFIRMADA_SIMULADA y suma el monto al proyecto (CA-06.1)', async () => {
+    const ctx = setup();
+    const created = await pendingDonation(ctx);
+    const response = await ctx.handlers.simulate(
+      event({ claims: ana, donationId: created.donationId, body: { outcome: 'CONFIRMADA_SIMULADA' } }),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({ donationId: created.donationId, status: 'CONFIRMADA_SIMULADA' });
+    expect(ctx.repo.projects.get(PUBLISHED_ID)?.confirmedAmountCents).toBe(2500);
+    expect(ctx.repo.audits.at(-1)).toMatchObject({ action: 'DONATION_SIMULATE', outcome: 'SUCCESS' });
+  });
+
+  it('rechazar pasa a RECHAZADA_SIMULADA y no cambia el total (CA-06.3)', async () => {
+    const ctx = setup();
+    const created = await pendingDonation(ctx);
+    const response = await ctx.handlers.simulate(
+      event({ claims: ana, donationId: created.donationId, body: { outcome: 'RECHAZADA_SIMULADA' } }),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({ status: 'RECHAZADA_SIMULADA' });
+    expect(ctx.repo.projects.get(PUBLISHED_ID)?.confirmedAmountCents).toBe(0);
+  });
+
+  it('una segunda transición responde 409 y no vuelve a sumar (CA-06.2)', async () => {
+    const ctx = setup();
+    const created = await pendingDonation(ctx);
+    const confirm = event({ claims: ana, donationId: created.donationId, body: { outcome: 'CONFIRMADA_SIMULADA' } });
+    await ctx.handlers.simulate(confirm);
+    const again = await ctx.handlers.simulate(confirm);
+    expect(again.statusCode).toBe(409);
+    expect(JSON.parse(again.body)).toMatchObject({ code: 'INVALID_TRANSITION' });
+    const reject = await ctx.handlers.simulate(
+      event({ claims: ana, donationId: created.donationId, body: { outcome: 'RECHAZADA_SIMULADA' } }),
+    );
+    expect(reject.statusCode).toBe(409);
+    expect(ctx.repo.projects.get(PUBLISHED_ID)?.confirmedAmountCents).toBe(2500);
+  });
+
+  it('10 confirmaciones en paralelo: una sola 200, nueve 409 y un solo incremento (T08, CA-NF04.1)', async () => {
+    const ctx = setup();
+    const created = await pendingDonation(ctx);
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, () =>
+        ctx.handlers.simulate(
+          event({ claims: ana, donationId: created.donationId, body: { outcome: 'CONFIRMADA_SIMULADA' } }),
+        ),
+      ),
+    );
+    expect(responses.filter((r) => r.statusCode === 200)).toHaveLength(1);
+    expect(responses.filter((r) => r.statusCode === 409)).toHaveLength(9);
+    expect(ctx.repo.projects.get(PUBLISHED_ID)?.confirmedAmountCents).toBe(2500);
+  });
+
+  it('la donación de otro donante responde 404 y no cambia (CA-06.1, anti-BOLA)', async () => {
+    const ctx = setup();
+    const created = await pendingDonation(ctx);
+    const response = await ctx.handlers.simulate(
+      event({ claims: beto, donationId: created.donationId, body: { outcome: 'CONFIRMADA_SIMULADA' } }),
+    );
+    expect(response.statusCode).toBe(404);
+    expect(ctx.repo.donations.get(created.donationId)?.status).toBe('PENDIENTE_SIMULACION');
+    expect(ctx.repo.projects.get(PUBLISHED_ID)?.confirmedAmountCents).toBe(0);
+  });
+
+  it('fuera del stage academic la ruta responde 404 (CA-06.1)', async () => {
+    const ctx = setup('prod');
+    const response = await ctx.handlers.simulate(
+      event({ claims: ana, donationId: MISSING_ID, body: { outcome: 'CONFIRMADA_SIMULADA' } }),
+    );
+    expect(response.statusCode).toBe(404);
+  });
+
+  it.each([['PENDIENTE_SIMULACION'], ['PAGADA'], [undefined]])('outcome %s responde 400', async (outcome) => {
+    const ctx = setup();
+    const created = await pendingDonation(ctx);
+    const response = await ctx.handlers.simulate(
+      event({ claims: ana, donationId: created.donationId, body: { outcome } }),
+    );
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('un GESTOR recibe 403 y una inexistente 404', async () => {
+    const ctx = setup();
+    const body = { outcome: 'CONFIRMADA_SIMULADA' };
+    expect((await ctx.handlers.simulate(event({ claims: gestor, donationId: MISSING_ID, body }))).statusCode).toBe(403);
+    expect((await ctx.handlers.simulate(event({ claims: ana, donationId: MISSING_ID, body }))).statusCode).toBe(404);
   });
 });

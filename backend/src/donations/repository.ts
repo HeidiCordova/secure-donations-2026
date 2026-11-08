@@ -15,6 +15,16 @@ export interface CreateDonationWrite {
  */
 export type CreateDonationResult = 'CREATED' | 'KEY_EXISTS';
 
+/** Estados terminales permitidos (SimulateDonationBodySchema). */
+export type SimulationOutcome = 'CONFIRMADA_SIMULADA' | 'RECHAZADA_SIMULADA';
+
+export interface SimulateDonationWrite {
+  donation: Donation;
+  outcome: SimulationOutcome;
+  updatedAt: string;
+  audit: AuditEvent;
+}
+
 export interface DonationRepository {
   getIdempotencyRecord(pk: string): Promise<IdempotencyRecord | undefined>;
   getProject(projectId: string): Promise<Project | undefined>;
@@ -23,4 +33,10 @@ export interface DonationRepository {
   /** Donaciones del donante, más recientes primero (GSI donorSub-createdAt). */
   listByDonor(donorSub: string): Promise<Donation[]>;
   getDonation(donationId: string): Promise<Donation | undefined>;
+  /**
+   * PENDIENTE_SIMULACION → estado terminal, en una sola transacción (CA-06.2, RNF-HU-04):
+   * update condicionado de la donación + incremento del proyecto (solo si se confirma) + AuditEvent.
+   * Lanza INVALID_TRANSITION si la donación ya no está pendiente, también ante solicitudes concurrentes.
+   */
+  simulateDonation(write: SimulateDonationWrite): Promise<Donation>;
 }
