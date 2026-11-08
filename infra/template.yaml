@@ -12,9 +12,17 @@ Parameters:
     Type: String
     Default: http://localhost:5173
     Description: Origen de la SPA en desarrollo local (CORS y callback de Cognito).
+  WebOrigin:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^https://[a-z0-9.-]+$'
+    Description: >-
+      Origen HTTPS de la SPA en CloudFront (sale en el output WebUrl). Se completa después del
+      primer despliegue para evitar una dependencia circular entre CloudFront, Cognito y el API.
 
 Conditions:
   IsAcademic: !Equals [!Ref Stage, academic]
+  HasWebOrigin: !Not [!Equals [!Ref WebOrigin, '']]
 
 Globals:
   Function:
@@ -130,8 +138,11 @@ Resources:
       SupportedIdentityProviders: [COGNITO]
       CallbackURLs:
         - !Sub ${LocalOrigin}/callback
+        - !If [HasWebOrigin, !Sub '${WebOrigin}/callback', !Ref AWS::NoValue]
       LogoutURLs:
         - !Sub ${LocalOrigin}/
+        - !If [HasWebOrigin, !Sub '${WebOrigin}/', !Ref AWS::NoValue]
+      # Solo refresh: el login es exclusivamente por hosted UI con PKCE (mínimo privilegio)
       ExplicitAuthFlows:
         - ALLOW_REFRESH_TOKEN_AUTH
       # Tokens de vida corta (CA-03.3, AD-07)
@@ -251,6 +262,7 @@ Resources:
           Value: aqp-solidaria
         - Key: stage
           Value: !Ref Stage
+
   # ---------------------------------------------------------------------------
   # Policy Enforcement Point: API Gateway HTTP API con JWT authorizer
   # ---------------------------------------------------------------------------
@@ -264,6 +276,7 @@ Resources:
       CorsConfiguration:
         AllowOrigins:
           - !Ref LocalOrigin
+          - !If [HasWebOrigin, !Ref WebOrigin, !Ref AWS::NoValue]
         AllowHeaders: [authorization, content-type, idempotency-key]
         AllowMethods: [GET, POST, PATCH, OPTIONS]
         MaxAge: 600
@@ -331,6 +344,130 @@ Resources:
     Properties:
       LogGroupName: !Sub /aws/lambda/${WhoAmIFunction}
       RetentionInDays: 14
+
+  # ---------------------------------------------------------------------------
+  # Frontend: S3 privado + CloudFront con OAC y cabeceras de seguridad (RNF-HU-01, RNF-HU-11)
+  # ---------------------------------------------------------------------------
+  WebBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      # Privado: solo CloudFront lee mediante OAC
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: project
+          Value: aqp-solidaria
+        - Key: stage
+          Value: !Ref Stage
+
+  WebOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub aqp-solidaria-${Stage}-oac
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub aqp-solidaria-${Stage}-security-headers
+        SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            Override: true
+            # connect-src: solo el API y Cognito (login y JWKS)
+            ContentSecurityPolicy: !Sub >-
+              default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;
+              font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none';
+              form-action 'self' https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com;
+              connect-src 'self' https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+              https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com
+              https://cognito-idp.${AWS::Region}.amazonaws.com
+          StrictTransportSecurity:
+            Override: true
+            AccessControlMaxAgeSec: 31536000
+            IncludeSubdomains: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            Override: true
+            FrameOption: DENY
+          ReferrerPolicy:
+            Override: true
+            ReferrerPolicy: strict-origin-when-cross-origin
+        # Desactiva APIs del navegador que la app no usa (RNF-HU-11)
+        CustomHeadersConfig:
+          Items:
+            - Header: Permissions-Policy
+              Value: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+              Override: true
+
+  WebDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub aqp-solidaria-${Stage}
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: web-s3
+            DomainName: !GetAtt WebBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt WebOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: web-s3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          Compress: true
+          # Política administrada CachingOptimized
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+        # SPA: las rutas del router devuelven index.html
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+      Tags:
+        - Key: project
+          Value: aqp-solidaria
+        - Key: stage
+          Value: !Ref Stage
+
+  # Solo esta distribución de CloudFront puede leer el bucket
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${WebBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}
 
   # ---------------------------------------------------------------------------
   # Módulo projects (HU-01, HU-02, HU-08, HU-09). Un rol IAM por función con
@@ -511,3 +648,10 @@ Outputs:
     Value: !Ref IdempotencyTable
   AuditEventsTableName:
     Value: !Ref AuditEventsTable
+  WebUrl:
+    Description: URL HTTPS de la SPA (usar como WebOrigin en samconfig.toml)
+    Value: !Sub https://${WebDistribution.DomainName}
+  WebBucketName:
+    Value: !Ref WebBucket
+  WebDistributionId:
+    Value: !Ref WebDistribution
