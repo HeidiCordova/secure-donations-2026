@@ -1,0 +1,33 @@
+meta {
+  name: T07 - Reutilizar clave con carga distinta
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/v1/donations
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{donorAccessToken}}
+}
+
+headers {
+  Content-Type: application/json
+  Idempotency-Key: {{idempotencyKey}}
+}
+
+body:json {
+  {
+    "projectId": "{{projectId}}",
+    "amountCents": 2000
+  }
+}
+
+tests {
+  test("La misma clave con otra carga devuelve conflicto", function() {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

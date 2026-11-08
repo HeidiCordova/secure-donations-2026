@@ -1,0 +1,35 @@
+meta {
+  name: T06 - Repetir clave y carga idénticas
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/v1/donations
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{donorAccessToken}}
+}
+
+headers {
+  Content-Type: application/json
+  Idempotency-Key: {{idempotencyKey}}
+}
+
+body:json {
+  {
+    "projectId": "{{projectId}}",
+    "amountCents": 1000
+  }
+}
+
+tests {
+  test("El reintento devuelve la donación previamente creada", function() {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getHeader("idempotent-replayed")).to.equal("true");
+    expect(res.getBody().donationId).to.equal(bru.getVar("donationId"));
+  });
+}

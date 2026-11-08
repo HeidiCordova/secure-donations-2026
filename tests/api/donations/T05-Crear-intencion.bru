@@ -1,0 +1,38 @@
+meta {
+  name: T05 - Crear intención de donación
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/v1/donations
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{donorAccessToken}}
+}
+
+headers {
+  Content-Type: application/json
+  Idempotency-Key: {{idempotencyKey}}
+}
+
+body:json {
+  {
+    "projectId": "{{projectId}}",
+    "amountCents": 1000
+  }
+}
+
+tests {
+  test("La intención válida queda pendiente y sin cobro", function() {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.status).to.equal("PENDIENTE_SIMULACION");
+    expect(body.amountCents).to.equal(1000);
+    expect(body.donationId).to.be.a("string");
+    bru.setVar("donationId", body.donationId);
+  });
+}
