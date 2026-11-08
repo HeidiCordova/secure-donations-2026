@@ -13,6 +13,7 @@ export default tseslint.config(
       ecmaVersion: 2023,
       sourceType: 'module',
       globals: { ...globals.node },
+      parserOptions: { tsconfigRootDir: import.meta.dirname },
     },
     rules: {
       'no-console': 'warn',
