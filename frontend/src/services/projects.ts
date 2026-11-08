@@ -19,10 +19,7 @@ export interface ProjectStats {
 
 const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, '');
 
-export async function getJson<T>(
-  path: string,
-  signal?: AbortSignal,
-): Promise<T> {
+export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!apiBaseUrl) {
     throw new Error('Falta configurar la variable de entorno VITE_API_URL.');
   }
@@ -36,9 +33,7 @@ export async function getJson<T>(
 }
 
 export function getErrorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : 'Ocurrió un error inesperado al comunicarse con el servicio.';
+  return error instanceof Error ? error.message : 'Ocurrió un error inesperado al comunicarse con el servicio.';
 }
 
 export function formatPEN(amountCents: number): string {

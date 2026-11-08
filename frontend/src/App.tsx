@@ -22,7 +22,8 @@ function ApplicationRoutes() {
 
     userManager.events.addUserLoaded(onUserLoaded);
     userManager.events.addUserUnloaded(onUserUnloaded);
-    void userManager.getUser()
+    void userManager
+      .getUser()
       .then((currentUser) => {
         if (active) {
           setUser(currentUser);

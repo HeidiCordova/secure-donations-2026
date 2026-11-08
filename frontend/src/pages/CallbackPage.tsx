@@ -25,13 +25,17 @@ export function CallbackPage() {
       {error ? (
         <>
           <h1 className="text-2xl font-bold text-slate-900">No se pudo iniciar sesión</h1>
-          <p className="mt-3 text-red-800" role="alert">{error}</p>
+          <p className="mt-3 text-red-800" role="alert">
+            {error}
+          </p>
           <Link className="mt-6 inline-block font-semibold text-emerald-800 underline" to="/">
             Volver al catálogo
           </Link>
         </>
       ) : (
-        <p className="text-slate-600" role="status">Verificando la sesión…</p>
+        <p className="text-slate-600" role="status">
+          Verificando la sesión…
+        </p>
       )}
     </section>
   );

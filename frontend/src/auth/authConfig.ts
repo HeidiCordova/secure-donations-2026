@@ -1,8 +1,4 @@
-import {
-  InMemoryWebStorage,
-  UserManager,
-  WebStorageStateStore,
-} from 'oidc-client-ts';
+import { InMemoryWebStorage, UserManager, WebStorageStateStore } from 'oidc-client-ts';
 
 function requiredEnv(name: keyof ImportMetaEnv): string {
   const value = import.meta.env[name]?.trim();

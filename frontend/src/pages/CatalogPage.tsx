@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  formatPEN,
-  getErrorMessage,
-  getJson,
-  type Project,
-} from '../services/projects';
+import { formatPEN, getErrorMessage, getJson, type Project } from '../services/projects';
 
 interface ProjectsResponse {
   items: Project[];
@@ -31,12 +26,8 @@ export function CatalogPage() {
   return (
     <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
       <header className="mb-8">
-        <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          AQP-SOLIDARIA
-        </p>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-          Catálogo de proyectos
-        </h1>
+        <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-700">AQP-SOLIDARIA</p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Catálogo de proyectos</h1>
         <p className="mt-3 max-w-2xl text-slate-600">
           Conoce las iniciativas publicadas y el avance de sus metas solidarias.
         </p>
@@ -48,7 +39,9 @@ export function CatalogPage() {
         </p>
       )}
       {!error && projects === null && (
-        <p className="text-slate-600" role="status">Cargando proyectos…</p>
+        <p className="text-slate-600" role="status">
+          Cargando proyectos…
+        </p>
       )}
       {!error && projects?.length === 0 && (
         <p className="rounded-lg border border-slate-200 bg-white p-6 text-slate-600">
@@ -64,21 +57,15 @@ export function CatalogPage() {
               key={project.projectId}
             >
               <h2 className="text-xl font-semibold text-slate-900">{project.title}</h2>
-              <p className="mt-3 flex-1 whitespace-pre-line text-sm leading-6 text-slate-600">
-                {project.description}
-              </p>
+              <p className="mt-3 flex-1 whitespace-pre-line text-sm leading-6 text-slate-600">{project.description}</p>
               <dl className="mt-6 grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <dt className="text-slate-500">Recaudado</dt>
-                  <dd className="mt-1 font-semibold text-emerald-800">
-                    {formatPEN(project.confirmedAmountCents)}
-                  </dd>
+                  <dd className="mt-1 font-semibold text-emerald-800">{formatPEN(project.confirmedAmountCents)}</dd>
                 </div>
                 <div>
                   <dt className="text-slate-500">Meta</dt>
-                  <dd className="mt-1 font-semibold text-slate-900">
-                    {formatPEN(project.goalAmountCents)}
-                  </dd>
+                  <dd className="mt-1 font-semibold text-slate-900">{formatPEN(project.goalAmountCents)}</dd>
                 </div>
               </dl>
               <Link

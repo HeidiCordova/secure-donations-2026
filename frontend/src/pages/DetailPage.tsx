@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import {
-  formatPEN,
-  getErrorMessage,
-  getJson,
-  type Project,
-  type ProjectStats,
-} from '../services/projects';
+import { formatPEN, getErrorMessage, getJson, type Project, type ProjectStats } from '../services/projects';
 
 interface ProjectDetail {
   project: Project;
@@ -26,10 +20,7 @@ export function DetailPage() {
     const controller = new AbortController();
     void Promise.all([
       getJson<Project>(`/v1/projects/${encodeURIComponent(id)}`, controller.signal),
-      getJson<ProjectStats>(
-        `/v1/projects/${encodeURIComponent(id)}/stats`,
-        controller.signal,
-      ),
+      getJson<ProjectStats>(`/v1/projects/${encodeURIComponent(id)}/stats`, controller.signal),
     ])
       .then(([project, stats]) => setDetail({ project, stats }))
       .catch((requestError: unknown) => {
@@ -76,9 +67,10 @@ export function DetailPage() {
   }
 
   const { project, stats } = detail;
-  const percentage = stats.goalAmountCents > 0
-    ? Math.min(100, Math.max(0, (stats.confirmedAmountCents / stats.goalAmountCents) * 100))
-    : 0;
+  const percentage =
+    stats.goalAmountCents > 0
+      ? Math.min(100, Math.max(0, (stats.confirmedAmountCents / stats.goalAmountCents) * 100))
+      : 0;
   const roundedPercentage = Math.round(percentage);
 
   return (
@@ -87,22 +79,14 @@ export function DetailPage() {
         ← Volver al catálogo
       </Link>
       <header className="mt-8">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Proyecto solidario
-        </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-          {project.title}
-        </h1>
-        <p className="mt-5 whitespace-pre-line text-lg leading-8 text-slate-700">
-          {project.description}
-        </p>
+        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Proyecto solidario</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{project.title}</h1>
+        <p className="mt-5 whitespace-pre-line text-lg leading-8 text-slate-700">{project.description}</p>
       </header>
 
       <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap justify-between gap-2 text-sm">
-          <span className="font-semibold text-slate-900">
-            Recaudado: {formatPEN(stats.confirmedAmountCents)}
-          </span>
+          <span className="font-semibold text-slate-900">Recaudado: {formatPEN(stats.confirmedAmountCents)}</span>
           <span className="text-slate-600">Meta: {formatPEN(stats.goalAmountCents)}</span>
         </div>
         <div
@@ -113,14 +97,9 @@ export function DetailPage() {
           className="mt-4 h-3 overflow-hidden rounded-full bg-slate-200"
           role="progressbar"
         >
-          <div
-            className="h-full rounded-full bg-emerald-600 transition-[width]"
-            style={{ width: `${percentage}%` }}
-          />
+          <div className="h-full rounded-full bg-emerald-600 transition-[width]" style={{ width: `${percentage}%` }} />
         </div>
-        <p className="mt-2 text-right text-sm font-medium text-slate-600">
-          {roundedPercentage}% de la meta
-        </p>
+        <p className="mt-2 text-right text-sm font-medium text-slate-600">{roundedPercentage}% de la meta</p>
       </section>
     </article>
   );
