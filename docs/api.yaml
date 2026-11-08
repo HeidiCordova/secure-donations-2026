@@ -6,7 +6,8 @@ info:
     Prototipo académico de donaciones SIMULADAS (no se realizan cobros).
     Autenticación con Amazon Cognito (Authorization Code + PKCE). Las rutas protegidas exigen
     un access token (no ID token) con los scopes indicados; el grupo de Cognito se valida en Lambda.
-    Errores con formato uniforme { code, message, requestId }.
+    Errores de Lambda con formato uniforme { code, message, requestId }; los 401/403 del JWT authorizer
+    de API Gateway devuelven {"message": "Unauthorized" | "Forbidden"}.
 servers:
   - url: https://{apiId}.execute-api.us-east-2.amazonaws.com/academic
     description: Stage académico
@@ -147,10 +148,7 @@ paths:
       security:
         - cognito: [api/donations.write]
       parameters:
-        - name: donationId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/DonationId'
       requestBody:
         required: true
         content:
@@ -166,6 +164,27 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /v1/donations/{donationId}:
+    get:
+      tags: [donations]
+      summary: Consulta una donación propia (HU-07)
+      description: |
+        Solo el propietario (`donorSub` = `sub` del access token) puede verla.
+        Si la donación no existe o es de otro usuario se responde 404 sin revelar datos (anti-BOLA, CA-07.2, T09).
+      security:
+        - cognito: [api/donations.read]
+      parameters:
+        - $ref: '#/components/parameters/DonationId'
+      responses:
+        '200':
+          description: Donación del usuario autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Donation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /v1/donations/me:
     get:
@@ -226,17 +245,22 @@ components:
       description: Amazon Cognito, Authorization Code + PKCE obligatorio. Usar access token como Bearer.
       flows:
         authorizationCode:
-          authorizationUrl: https://aqp-solidaria-academic.auth.us-east-2.amazoncognito.com/oauth2/authorize
-          tokenUrl: https://aqp-solidaria-academic.auth.us-east-2.amazoncognito.com/oauth2/token
+          authorizationUrl: https://aqp-solidaria-academic-XXXXXXXXXXXX.auth.us-east-2.amazoncognito.com/oauth2/authorize
+          tokenUrl: https://aqp-solidaria-academic-XXXXXXXXXXXX.auth.us-east-2.amazoncognito.com/oauth2/token
           scopes:
             api/projects.write: Crear y publicar proyectos (GESTOR)
             api/donations.write: Crear y simular donaciones (DONANTE)
-            api/donations.read: Ver historial propio (DONANTE)
+            api/donations.read: Ver donaciones propias (DONANTE)
             api/audit.read: Consultar auditoría (AUDITOR)
 
   parameters:
     ProjectId:
       name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DonationId:
+      name: donationId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -326,6 +350,14 @@ components:
         action: { type: string }
         resourceRef: { type: string }
         outcome: { type: string }
+    GatewayError:
+      type: object
+      description: Cuerpo que devuelve el JWT authorizer de API Gateway (PEP); la solicitud no llega a Lambda.
+      required: [message]
+      properties:
+        message:
+          type: string
+          enum: [Unauthorized, Forbidden]
     Error:
       type: object
       required: [code, message, requestId]
@@ -353,15 +385,29 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Unauthorized:
-      description: Sin token, token expirado, alterado, de otro client o ID token
+      description: |
+        Sin token, token expirado, alterado o de otro app client (T02, T11).
+        Lo responde el JWT authorizer de API Gateway (PEP) con {"message":"Unauthorized"} y la cabecera
+        WWW-Authenticate (error="invalid_token"); la solicitud no llega a Lambda.
+        Si lo responde Lambda (defensa en profundidad en authz), usa el formato Error.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/GatewayError'
+              - $ref: '#/components/schemas/Error'
     Forbidden:
-      description: Rol insuficiente
+      description: |
+        Dos orígenes:
+        (1) API Gateway responde {"message":"Forbidden"} con WWW-Authenticate error="insufficient_scope"
+        cuando el token no tiene el scope de la ruta; por ejemplo, un ID token (T11).
+        (2) Lambda responde con formato Error cuando el grupo de Cognito no corresponde (T03, CA-04.1).
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/GatewayError'
+              - $ref: '#/components/schemas/Error'
     NotFound:
       description: No existe o no es visible para el solicitante (sin revelar contenido)
       content:
