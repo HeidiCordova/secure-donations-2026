@@ -19,10 +19,18 @@ Parameters:
     Description: >-
       Origen HTTPS de la SPA en CloudFront (sale en el output WebUrl). Se completa después del
       primer despliegue para evitar una dependencia circular entre CloudFront, Cognito y el API.
+  MfaEnrollment:
+    Type: String
+    Default: closed
+    AllowedValues: [closed, open]
+    Description: >-
+      Abre temporalmente el scope aws.cognito.signin.user.admin para que GESTOR y AUDITOR enrolen
+      su TOTP. Fuera del enrolamiento queda en closed (CA-11.1, mínimo privilegio).
 
 Conditions:
   IsAcademic: !Equals [!Ref Stage, academic]
   HasWebOrigin: !Not [!Equals [!Ref WebOrigin, '']]
+  MfaEnrollmentOpen: !Equals [!Ref MfaEnrollment, open]
 
 Globals:
   Function:
@@ -135,8 +143,9 @@ Resources:
         - api/donations.write
         - api/donations.read
         - api/audit.read
-        # Permite que el propio usuario enrole su TOTP (associate/verify-software-token)
-        - aws.cognito.signin.user.admin
+        # Solo mientras se enrola un TOTP (MfaEnrollment=open). Cerrado, un access token robado no puede
+        # llamar a SetUserMFAPreference para desactivar el MFA (CA-11.1).
+        - !If [MfaEnrollmentOpen, aws.cognito.signin.user.admin, !Ref AWS::NoValue]
       SupportedIdentityProviders: [COGNITO]
       CallbackURLs:
         - !Sub ${LocalOrigin}/callback

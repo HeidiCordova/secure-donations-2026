@@ -28,3 +28,15 @@ exit=0
 ## Inicio de sesión con segundo factor
 
 Al iniciar sesión como gestor1, después de la contraseña, Cognito pide el código TOTP de 6 dígitos (captura `T14-login-totp.png`, con el número de cuenta oculto).
+## Sin segundo factor no hay tokens
+
+Con un código TOTP incorrecto, Cognito muestra el error y no redirige al `/callback`: no se emite authorization code ni tokens (`T14-totp-incorrecto.png`).
+
+## Scope de enrolamiento cerrado
+
+Después del enrolamiento, el cliente ya no tiene `aws.cognito.signin.user.admin` (`MfaEnrollment=closed`):
+
+```text
+$ aws cognito-idp describe-user-pool-client ... --query UserPoolClient.AllowedOAuthScopes
+["openid","email","api/projects.write","api/donations.write","api/donations.read","api/audit.read"]
+```

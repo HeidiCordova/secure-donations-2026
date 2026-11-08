@@ -60,6 +60,8 @@ En Cognito el MFA se configura por user pool, no por grupo. El pool está en `OP
 
 1. Cada usuario de GESTOR y AUDITOR registra una app autenticadora (TOTP) y la deja como método preferido; desde ahí Cognito le pide el código en cada inicio de sesión (T14).
 2. `scripts/check-mfa.sh <user-pool-id>` verifica que todos los usuarios de GESTOR y AUDITOR tengan TOTP activo, y falla si alguno no lo tiene.
+3. Enrolamiento temporal: el scope `aws.cognito.signin.user.admin` solo existe en el cliente mientras se enrola a alguien. Se abre con `sam deploy --parameter-overrides Stage=academic WebOrigin=<WebUrl> MfaEnrollment=open`; el usuario inicia sesión pidiendo ese scope y se ejecutan `associate-software-token` → `verify-software-token` → `set-user-mfa-preference`. Al terminar se cierra con un `sam deploy` normal (`MfaEnrollment=closed` por defecto). Cerrado, un access token robado no puede desactivar el MFA.
+4. Riesgo residual: mientras el enrolamiento está abierto (minutos), un token con ese scope podría cambiar el MFA de su propio usuario. `check-mfa.sh` lo detectaría. La SPA nunca pide este scope.
 
 ## Despliegue
 
