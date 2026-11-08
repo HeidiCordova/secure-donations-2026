@@ -89,12 +89,23 @@ curl -s -i $API/v1/whoami   # 401 sin token (T02)
 
 ## Limpieza
 
-```bash
-cd secure-donations-2026/infra
-sam delete --stack-name aqp-solidaria-academic --region us-east-2
-```
+1. Vaciar el bucket de la web (si no, `sam delete` falla):
 
-Después, vaciar el bucket `aws-sam-cli-managed-default-*`, eliminar el stack `aws-sam-cli-managed-default` y verificar en Resource Explorer (tag `project=aqp-solidaria`) que no quedan recursos (CA-NF09.2).
+   ```bash
+   WEB_BUCKET=$(aws cloudformation describe-stacks --stack-name aqp-solidaria-academic \
+     --query "Stacks[0].Outputs[?OutputKey=='WebBucketName'].OutputValue" --output text)
+   aws s3 rm "s3://$WEB_BUCKET" --recursive
+   ```
+
+2. Eliminar el stack:
+
+   ```bash
+   cd secure-donations-2026/infra
+   sam delete --stack-name aqp-solidaria-academic --region us-east-2
+   ```
+
+3. Vaciar el bucket `aws-sam-cli-managed-default-*` y eliminar el stack `aws-sam-cli-managed-default`.
+4. Verificar en Resource Explorer (tag `project=aqp-solidaria`) que no quedan recursos (CA-NF09.2).
 
 ## Decisiones de versiones
 
