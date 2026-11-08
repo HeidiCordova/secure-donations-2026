@@ -54,13 +54,47 @@ npm run build
 - [Registro de MFA en AWS Settings](https://docs.aws.amazon.com/accounts/latest/reference/register-mfa-devices.html): MFA TOTP sobre el AWS Builder ID.
 - Evidencia: [`evidence/cuenta-aws/`](./evidence/cuenta-aws/)
 
+## MFA para roles privilegiados (CA-11.1)
+
+En Cognito el MFA se configura por user pool, no por grupo. El pool está en `OPTIONAL`, con TOTP como único segundo factor (sin SMS), y se aplica este control compensatorio:
+
+1. Cada usuario de GESTOR y AUDITOR registra una app autenticadora (TOTP) y la deja como método preferido; desde ahí Cognito le pide el código en cada inicio de sesión (T14).
+2. `scripts/check-mfa.sh <user-pool-id>` verifica que todos los usuarios de GESTOR y AUDITOR tengan TOTP activo, y falla si alguno no lo tiene.
+
 ## Despliegue
 
-_Pendiente (día 2): `sam build` y `sam deploy` desde CloudShell._
+Desde AWS CloudShell (región `us-east-2`, SAM CLI preinstalado, sin llaves de acceso):
+
+```bash
+git clone -b main https://github.com/HeidiCordova/secure-donations-2026.git
+cd secure-donations-2026/infra
+cd secure-donations-2026
+npm ci
+cd infra
+sam build
+sam deploy
+
+```
+
+- Las Lambdas se compilan con `backend/Makefile` (esbuild) en lugar del builder esbuild de SAM, que falla con los workspaces de npm.
+- Outputs del stack: `ApiUrl`, `UserPoolId`, `UserPoolClientId`, `CognitoDomain`.
+- Usuarios de prueba: uno por rol, creados con `aws cognito-idp admin-create-user`. Las contraseñas no se guardan en el repositorio.
+
+Verificación rápida:
+
+```bash
+curl -s $API/v1/health      # 200 {"status":"ok"}
+curl -s -i $API/v1/whoami   # 401 sin token (T02)
+```
 
 ## Limpieza
 
-_Pendiente: `sam delete`, vaciado de buckets y verificación de recursos._
+```bash
+cd secure-donations-2026/infra
+sam delete --stack-name aqp-solidaria-academic --region us-east-2
+```
+
+Después, vaciar el bucket `aws-sam-cli-managed-default-*`, eliminar el stack `aws-sam-cli-managed-default` y verificar en Resource Explorer (tag `project=aqp-solidaria`) que no quedan recursos (CA-NF09.2).
 
 ## Decisiones de versiones
 

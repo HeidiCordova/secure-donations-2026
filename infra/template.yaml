@@ -1,0 +1,238 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AQP-SOLIDARIA - Plataforma de Donaciones Seguras (Zero Trust, stage academic)
+
+Parameters:
+  Stage:
+    Type: String
+    Default: academic
+    AllowedValues: [academic, prod]
+    Description: Stage de despliegue. La ruta de simulación solo existe en academic (CA-06.1).
+  LocalOrigin:
+    Type: String
+    Default: http://localhost:5173
+    Description: Origen de la SPA en desarrollo local (CORS y callback de Cognito).
+
+Conditions:
+  IsAcademic: !Equals [!Ref Stage, academic]
+
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    Architectures: [arm64]
+    MemorySize: 256
+    Timeout: 10
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        NODE_OPTIONS: --enable-source-maps
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # Identidad (Policy Administrator): Cognito User Pool
+  # ---------------------------------------------------------------------------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub aqp-solidaria-${Stage}
+      UserPoolTier: ESSENTIALS
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      # Solo usuarios de prueba creados por el equipo (CA-NF10.1)
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      # MFA TOTP opcional a nivel de pool (Cognito no lo configura por grupo).
+      # Obligatorio para GESTOR y AUDITOR mediante control compensatorio:
+      # TOTP preferido por usuario + scripts/check-mfa.sh (CA-11.1, T14). Nunca SMS.
+      MfaConfiguration: 'OPTIONAL'
+      EnabledMfas: [SOFTWARE_TOKEN_MFA]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 3
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      UserPoolTags:
+        project: aqp-solidaria
+        stage: !Ref Stage
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: !Sub aqp-solidaria-${Stage}-${AWS::AccountId}
+
+  DonanteGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      UserPoolId: !Ref UserPool
+      GroupName: DONANTE
+      Description: Crea intenciones de donación simuladas y ve su historial
+
+  GestorGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      UserPoolId: !Ref UserPool
+      GroupName: GESTOR
+      Description: Crea y publica proyectos (MFA obligatorio)
+
+  AuditorGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      UserPoolId: !Ref UserPool
+      GroupName: AUDITOR
+      Description: Consulta eventos de auditoría (MFA obligatorio)
+
+  ApiResourceServer:
+    Type: AWS::Cognito::UserPoolResourceServer
+    Properties:
+      UserPoolId: !Ref UserPool
+      Identifier: api
+      Name: aqp-solidaria-api
+      Scopes:
+        - ScopeName: projects.write
+          ScopeDescription: Crear y publicar proyectos
+        - ScopeName: donations.write
+          ScopeDescription: Crear y simular donaciones
+        - ScopeName: donations.read
+          ScopeDescription: Ver historial propio
+        - ScopeName: audit.read
+          ScopeDescription: Consultar auditoría
+
+  # App client público (SPA): sin secreto, Authorization Code + PKCE (CA-03.1)
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: ApiResourceServer
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub aqp-solidaria-spa-${Stage}
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - api/projects.write
+        - api/donations.write
+        - api/donations.read
+        - api/audit.read
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs:
+        - !Sub ${LocalOrigin}/callback
+      LogoutURLs:
+        - !Sub ${LocalOrigin}/
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+      # Tokens de vida corta (CA-03.3, AD-07)
+      AccessTokenValidity: 15
+      IdTokenValidity: 15
+      RefreshTokenValidity: 8
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: hours
+      EnableTokenRevocation: true
+      PreventUserExistenceErrors: ENABLED
+
+  # ---------------------------------------------------------------------------
+  # Policy Enforcement Point: API Gateway HTTP API con JWT authorizer
+  # ---------------------------------------------------------------------------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Stage
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref LocalOrigin
+        AllowHeaders: [authorization, content-type, idempotency-key]
+        AllowMethods: [GET, POST, PATCH, OPTIONS]
+        MaxAge: 600
+      Auth:
+        DefaultAuthorizer: CognitoJwt
+        Authorizers:
+          CognitoJwt:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+              # Los access tokens de Cognito no traen aud: se valida client_id (CA-NF02.1)
+              audience:
+                - !Ref UserPoolClient
+      Tags:
+        project: aqp-solidaria
+        stage: !Ref Stage
+
+  # ---------------------------------------------------------------------------
+  # Funciones (un rol IAM por función; estas dos no acceden a DynamoDB)
+  # ---------------------------------------------------------------------------
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: health.handler
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/health
+            Method: GET
+            Auth:
+              Authorizer: NONE
+
+  HealthLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${HealthFunction}
+      RetentionInDays: 14
+
+  WhoAmIFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: whoami.handler
+      Events:
+        WhoAmI:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/whoami
+            Method: GET
+            Auth:
+              Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - api/donations.read
+
+  WhoAmILogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${WhoAmIFunction}
+      RetentionInDays: 14
+
+Outputs:
+  Region:
+    Value: !Ref AWS::Region
+  ApiUrl:
+    Description: URL base del API (HTTPS)
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  CognitoDomain:
+    Description: Dominio del login (hosted UI)
+    Value: !Sub https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com
+  IsAcademicStage:
+    Value: !If [IsAcademic, 'true', 'false']
