@@ -26,6 +26,11 @@ Globals:
       Variables:
         STAGE: !Ref Stage
         NODE_OPTIONS: --enable-source-maps
+        # Nombres de tablas por variable de entorno; el acceso lo da el rol IAM de cada función
+        TABLE_PROJECTS: !Ref ProjectsTable
+        TABLE_DONATIONS: !Ref DonationsTable
+        TABLE_IDEMPOTENCY: !Ref IdempotencyTable
+        TABLE_AUDIT: !Ref AuditEventsTable
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -342,3 +347,11 @@ Outputs:
     Value: !Sub https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com
   IsAcademicStage:
     Value: !If [IsAcademic, 'true', 'false']
+  ProjectsTableName:
+    Value: !Ref ProjectsTable
+  DonationsTableName:
+    Value: !Ref DonationsTable
+  IdempotencyTableName:
+    Value: !Ref IdempotencyTable
+  AuditEventsTableName:
+    Value: !Ref AuditEventsTable
