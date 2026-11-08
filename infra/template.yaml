@@ -126,7 +126,6 @@ Resources:
       LogoutURLs:
         - !Sub ${LocalOrigin}/
       ExplicitAuthFlows:
-        - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
       # Tokens de vida corta (CA-03.3, AD-07)
       AccessTokenValidity: 15
