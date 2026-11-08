@@ -1,11 +1,9 @@
-# Build de las Lambdas para AWS SAM (BuildMethod: makefile).
-# Se usa en lugar del builder esbuild de SAM para evitar su `npm install`
-# dentro del monorepo con workspaces (falla con "reading 'edgesOut'").
-.RECIPEPREFIX = >
 # Usa el esbuild local fijado en package-lock (requiere `npm ci` antes de `sam build`).
 .RECIPEPREFIX = >
 ESBUILD = npx --no esbuild
-ESBUILD_FLAGS = --bundle --platform=node --target=es2023 --format=esm --sourcemap
+# El banner define `require` dentro del bundle ESM: el SDK de AWS lo usa para cargar node:https.
+ESBUILD_FLAGS = --bundle --platform=node --target=es2023 --format=esm --sourcemap \
+  --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
 
 build-HealthFunction:
 > $(ESBUILD) src/handlers/health.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/health.mjs
