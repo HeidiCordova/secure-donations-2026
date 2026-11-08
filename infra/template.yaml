@@ -407,6 +407,12 @@ Resources:
           ReferrerPolicy:
             Override: true
             ReferrerPolicy: strict-origin-when-cross-origin
+                    # Desactiva APIs del navegador que la app no usa (RNF-HU-11)
+        CustomHeadersConfig:
+          Items:
+            - Header: Permissions-Policy
+              Value: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+              Override: true
 
   WebDistribution:
     Type: AWS::CloudFront::Distribution
