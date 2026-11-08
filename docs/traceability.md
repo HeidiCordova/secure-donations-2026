@@ -3,6 +3,7 @@
 Esta matriz enlaza historias y criterios de [requirements.md](../requirements.md), pruebas Bruno, PR de implementación y evidencia. **Preparada** significa que el caso está definido; no significa que se ejecutó contra AWS. Se comprobaron T01 y T02 en el stage sin credenciales (resultados debajo); los casos que requieren secretos locales y sus capturas siguen pendientes.
 
 Los PR citados son el origen principal de implementación; **#14** contiene la documentación y colección Bruno. Los PR **#13** (MFA) y **#15** (simulación) permanecen abiertos al momento de elaborar esta matriz.
+Las ampliaciones Bruno, esta matriz y la evidencia sanitizada de este bloque se entregan en [PR #16](https://github.com/HeidiCordova/secure-donations-2026/pull/16).
 
 ## Historias de usuario
 
