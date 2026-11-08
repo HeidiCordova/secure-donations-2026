@@ -1,0 +1,420 @@
+openapi: 3.1.0
+info:
+  title: Plataforma de Donaciones Seguras — AQP-SOLIDARIA
+  version: 1.0.0
+  description: |
+    Prototipo académico de donaciones SIMULADAS (no se realizan cobros).
+    Autenticación con Amazon Cognito (Authorization Code + PKCE). Las rutas protegidas exigen
+    un access token (no ID token) con los scopes indicados; el grupo de Cognito se valida en Lambda.
+    Errores de Lambda con formato uniforme { code, message, requestId }; los 401/403 del JWT authorizer
+    de API Gateway devuelven {"message": "Unauthorized" | "Forbidden"}.
+servers:
+  - url: https://{apiId}.execute-api.us-east-2.amazonaws.com/academic
+    description: Stage académico
+    variables:
+      apiId:
+        default: example
+tags:
+  - name: projects
+  - name: donations
+  - name: audit
+security: []
+
+paths:
+  /v1/projects:
+    get:
+      tags: [projects]
+      summary: Lista proyectos PUBLICADO (HU-01)
+      security: []
+      responses:
+        '200':
+          description: Catálogo público; los BORRADOR no aparecen (CA-01.2)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicProject' }
+    post:
+      tags: [projects]
+      summary: Crea un proyecto en BORRADOR (HU-08, solo GESTOR)
+      security:
+        - cognito: [api/projects.write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProjectBody' }
+      responses:
+        '201':
+          description: Proyecto creado en BORRADOR
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/projects/{projectId}:
+    get:
+      tags: [projects]
+      summary: Detalle de un proyecto PUBLICADO (HU-02)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Detalle sin datos de donantes (CA-02.1)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicProject' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/projects/{projectId}/stats:
+    get:
+      tags: [projects]
+      summary: Indicadores agregados confirmados (HU-09)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Suma confirmada; excluye pendientes y rechazadas (CA-09.1)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectStats' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/projects/{projectId}/publish:
+    patch:
+      tags: [projects]
+      summary: Publica un proyecto BORRADOR (HU-08, solo GESTOR)
+      security:
+        - cognito: [api/projects.write]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Proyecto publicado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /v1/donations:
+    post:
+      tags: [donations]
+      summary: Registra una intención de donación simulada (HU-05, solo DONANTE)
+      description: |
+        `donorSub` se toma del access token, nunca del body (CA-05.3).
+        Reenviar la misma Idempotency-Key con el mismo body devuelve la misma respuesta 201
+        sin crear otra donación; con body distinto devuelve 409 (CA-05.4).
+      security:
+        - cognito: [api/donations.write]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDonationBody' }
+      responses:
+        '201':
+          description: Donación creada en PENDIENTE_SIMULACION (sin cargo)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Donation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /v1/donations/{donationId}/simulate:
+    post:
+      tags: [donations]
+      summary: Simula confirmación o rechazo de una donación propia (HU-06)
+      description: Solo existe en el stage `academic` (CA-06.1). Simulación académica, no se realiza ningún cobro.
+      x-stage: academic
+      security:
+        - cognito: [api/donations.write]
+      parameters:
+        - $ref: '#/components/parameters/DonationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SimulateDonationBody' }
+      responses:
+        '200':
+          description: Transición aplicada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Donation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /v1/donations/{donationId}:
+    get:
+      tags: [donations]
+      summary: Consulta una donación propia (HU-07)
+      description: |
+        Solo el propietario (`donorSub` = `sub` del access token) puede verla.
+        Si la donación no existe o es de otro usuario se responde 404 sin revelar datos (anti-BOLA, CA-07.2, T09).
+      security:
+        - cognito: [api/donations.read]
+      parameters:
+        - $ref: '#/components/parameters/DonationId'
+      responses:
+        '200':
+          description: Donación del usuario autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Donation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/donations/me:
+    get:
+      tags: [donations]
+      summary: Historial de donaciones del usuario autenticado (HU-07)
+      security:
+        - cognito: [api/donations.read]
+      responses:
+        '200':
+          description: Solo registros del `sub` autenticado (CA-07.1)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Donation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/audit:
+    get:
+      tags: [audit]
+      summary: Consulta eventos de auditoría (HU-10, extensión, solo AUDITOR)
+      security:
+        - cognito: [api/audit.read]
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Eventos sin tokens, claves ni datos financieros (CA-10.2)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditEvent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+  securitySchemes:
+    cognito:
+      type: oauth2
+      description: Amazon Cognito, Authorization Code + PKCE obligatorio. Usar access token como Bearer.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://aqp-solidaria-academic-XXXXXXXXXXXX.auth.us-east-2.amazoncognito.com/oauth2/authorize
+          tokenUrl: https://aqp-solidaria-academic-XXXXXXXXXXXX.auth.us-east-2.amazoncognito.com/oauth2/token
+          scopes:
+            api/projects.write: Crear y publicar proyectos (GESTOR)
+            api/donations.write: Crear y simular donaciones (DONANTE)
+            api/donations.read: Ver donaciones propias (DONANTE)
+            api/audit.read: Consultar auditoría (AUDITOR)
+
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DonationId:
+      name: donationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  schemas:
+    Currency:
+      type: string
+      const: PEN
+    ProjectStatus:
+      type: string
+      enum: [BORRADOR, PUBLICADO]
+    DonationStatus:
+      type: string
+      enum: [PENDIENTE_SIMULACION, CONFIRMADA_SIMULADA, RECHAZADA_SIMULADA]
+    Project:
+      type: object
+      required:
+        [projectId, title, description, goalAmountCents, confirmedAmountCents, currency, status, createdAt, updatedAt]
+      properties:
+        projectId: { type: string, format: uuid }
+        title: { type: string, minLength: 3, maxLength: 120 }
+        description: { type: string, minLength: 10, maxLength: 2000 }
+        goalAmountCents: { type: integer, minimum: 1 }
+        confirmedAmountCents: { type: integer, minimum: 0 }
+        currency: { $ref: '#/components/schemas/Currency' }
+        status: { $ref: '#/components/schemas/ProjectStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PublicProject:
+      description: Vista pública; sin datos de donantes (CA-02.1, CA-09.2)
+      $ref: '#/components/schemas/Project'
+    CreateProjectBody:
+      type: object
+      additionalProperties: false
+      required: [title, description, goalAmountCents]
+      properties:
+        title: { type: string, minLength: 3, maxLength: 120 }
+        description: { type: string, minLength: 10, maxLength: 2000 }
+        goalAmountCents: { type: integer, minimum: 1 }
+    ProjectStats:
+      type: object
+      required: [projectId, goalAmountCents, confirmedAmountCents, currency]
+      properties:
+        projectId: { type: string, format: uuid }
+        goalAmountCents: { type: integer, minimum: 1 }
+        confirmedAmountCents: { type: integer, minimum: 0 }
+        currency: { $ref: '#/components/schemas/Currency' }
+    Donation:
+      type: object
+      required: [donationId, projectId, donorSub, amountCents, currency, status, createdAt, updatedAt]
+      properties:
+        donationId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        donorSub: { type: string }
+        amountCents: { type: integer, minimum: 100, maximum: 100000 }
+        currency: { $ref: '#/components/schemas/Currency' }
+        status: { $ref: '#/components/schemas/DonationStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateDonationBody:
+      type: object
+      additionalProperties: false
+      required: [projectId, amountCents]
+      properties:
+        projectId: { type: string, format: uuid }
+        amountCents:
+          type: integer
+          minimum: 100
+          maximum: 100000
+          description: Céntimos de PEN (S/ 1.00 a S/ 1,000.00)
+    SimulateDonationBody:
+      type: object
+      additionalProperties: false
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [CONFIRMADA_SIMULADA, RECHAZADA_SIMULADA]
+    AuditEvent:
+      type: object
+      required: [eventId, timestamp, requestId, actorRef, action, resourceRef, outcome]
+      properties:
+        eventId: { type: string }
+        timestamp: { type: string, format: date-time }
+        requestId: { type: string }
+        actorRef: { type: string, description: Actor seudonimizado }
+        action: { type: string }
+        resourceRef: { type: string }
+        outcome: { type: string }
+    GatewayError:
+      type: object
+      description: Cuerpo que devuelve el JWT authorizer de API Gateway (PEP); la solicitud no llega a Lambda.
+      required: [message]
+      properties:
+        message:
+          type: string
+          enum: [Unauthorized, Forbidden]
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code:
+          type: string
+          enum:
+            [
+              VALIDATION_ERROR,
+              UNAUTHENTICATED,
+              FORBIDDEN,
+              NOT_FOUND,
+              CONFLICT,
+              IDEMPOTENCY_MISMATCH,
+              INVALID_TRANSITION,
+              INTERNAL_ERROR,
+            ]
+        message: { type: string }
+        requestId: { type: string }
+
+  responses:
+    BadRequest:
+      description: Datos inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: |
+        Sin token, token expirado, alterado o de otro app client (T02, T11).
+        Lo responde el JWT authorizer de API Gateway (PEP) con {"message":"Unauthorized"} y la cabecera
+        WWW-Authenticate (error="invalid_token"); la solicitud no llega a Lambda.
+        Si lo responde Lambda (defensa en profundidad en authz), usa el formato Error.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/GatewayError'
+              - $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: |
+        Dos orígenes:
+        (1) API Gateway responde {"message":"Forbidden"} con WWW-Authenticate error="insufficient_scope"
+        cuando el token no tiene el scope de la ruta; por ejemplo, un ID token (T11).
+        (2) Lambda responde con formato Error cuando el grupo de Cognito no corresponde (T03, CA-04.1).
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/GatewayError'
+              - $ref: '#/components/schemas/Error'
+    NotFound:
+      description: No existe o no es visible para el solicitante (sin revelar contenido)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Estado inválido, transición inválida o Idempotency-Key reutilizada con otro body
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
