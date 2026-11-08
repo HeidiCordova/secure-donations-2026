@@ -1,10 +1,21 @@
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
-import { GetCommand, QueryCommand, TransactWriteCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import {
+  GetCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  type DynamoDBDocumentClient,
+  type TransactWriteCommandInput,
+} from '@aws-sdk/lib-dynamodb';
 import { toAuditItem } from '../audit/dynamo-audit-log.js';
 import { AppError } from '../shared/errors.js';
 import { DonationSchema, ProjectSchema, type Donation, type Project } from '../shared/schemas.js';
 import type { IdempotencyRecord } from './idempotency.js';
-import type { CreateDonationResult, CreateDonationWrite, DonationRepository } from './repository.js';
+import type {
+  CreateDonationResult,
+  CreateDonationWrite,
+  DonationRepository,
+  SimulateDonationWrite,
+} from './repository.js';
 
 /** GSI del historial (design.md §5): PK `donorSub`, SK `createdAt`. */
 export const DONATIONS_DONOR_INDEX = 'donorSub-createdAt';
@@ -21,6 +32,8 @@ export interface DynamoDonationRepositoryConfig {
 // Orden de los elementos de la transacción: CancellationReasons llega en el mismo orden.
 const TX_IDEMPOTENCY = 0;
 const TX_PROJECT_CHECK = 2;
+const TX_SIMULATE_DONATION = 0;
+const TX_SIMULATE_PROJECT = 1;
 
 function required(value: string | undefined, name: string): string {
   if (value === undefined) {
@@ -147,6 +160,63 @@ export function createDynamoDonationRepository(config: DynamoDonationRepositoryC
         exclusiveStartKey = page.LastEvaluatedKey;
       } while (exclusiveStartKey !== undefined);
       return donations;
+    },
+
+    async simulateDonation({ donation, outcome, updatedAt, audit }: SimulateDonationWrite): Promise<Donation> {
+      const items: NonNullable<TransactWriteCommandInput['TransactItems']> = [
+        {
+          // Solo la primera transición desde PENDIENTE_SIMULACION tiene éxito (CA-06.2).
+          Update: {
+            TableName: donationsTable,
+            Key: { donationId: donation.donationId },
+            ConditionExpression: '#status = :pending AND donorSub = :sub',
+            UpdateExpression: 'SET #status = :outcome, updatedAt = :updatedAt',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: {
+              ':pending': 'PENDIENTE_SIMULACION',
+              ':sub': donation.donorSub,
+              ':outcome': outcome,
+              ':updatedAt': updatedAt,
+            },
+          },
+        },
+      ];
+      if (outcome === 'CONFIRMADA_SIMULADA') {
+        // ADD es atómico; al ir en la misma transacción, el total sube una sola vez (RNF-HU-04).
+        items.push({
+          Update: {
+            TableName: projectsTable(),
+            Key: { projectId: donation.projectId },
+            ConditionExpression: 'attribute_exists(projectId)',
+            UpdateExpression: 'ADD confirmedAmountCents :amount SET updatedAt = :updatedAt',
+            ExpressionAttributeValues: { ':amount': donation.amountCents, ':updatedAt': updatedAt },
+          },
+        });
+      }
+      items.push({ Put: { TableName: auditTable(), Item: toAuditItem(audit) } });
+
+      try {
+        await client.send(new TransactWriteCommand({ TransactItems: items }));
+      } catch (error) {
+        if (error instanceof TransactionCanceledException) {
+          const reasons = error.CancellationReasons ?? [];
+          if (reasons[TX_SIMULATE_DONATION]?.Code === 'ConditionalCheckFailed') {
+            throw new AppError('INVALID_TRANSITION', 'La donación ya no está pendiente');
+          }
+          if (outcome === 'CONFIRMADA_SIMULADA' && reasons[TX_SIMULATE_PROJECT]?.Code === 'ConditionalCheckFailed') {
+            throw new AppError('NOT_FOUND', 'Recurso no encontrado');
+          }
+          if (reasons.some((reason) => reason.Code === 'TransactionConflict')) {
+            // Otra confirmación de la misma donación se está aplicando: esta no suma nada.
+            throw new AppError('INVALID_TRANSITION', 'La donación ya no está pendiente');
+          }
+        }
+        if (error instanceof Error && error.name === 'TransactionConflictException') {
+          throw new AppError('INVALID_TRANSITION', 'La donación ya no está pendiente');
+        }
+        throw error;
+      }
+      return { ...donation, status: outcome, updatedAt };
     },
 
     async getDonation(donationId: string) {

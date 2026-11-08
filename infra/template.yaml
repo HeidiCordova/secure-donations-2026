@@ -743,6 +743,48 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${GetDonationFunction}
       RetentionInDays: 14
 
+  # Simulación académica (HU-06): la función y su ruta solo existen en el stage academic (CA-06.1).
+  SimulateDonationFunction:
+    Type: AWS::Serverless::Function
+    Condition: IsAcademic
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: donations-simulate.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            # Update condicionado de la donación + ADD en el proyecto + AuditEvent en un TransactWriteItems
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt DonationsTable.Arn
+            - Effect: Allow
+              Action: dynamodb:UpdateItem
+              Resource: !GetAtt ProjectsTable.Arn
+            - Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt AuditEventsTable.Arn
+      Events:
+        SimulateDonation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/donations/{donationId}/simulate
+            Method: POST
+            Auth:
+              Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - api/donations.write
+  SimulateDonationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: IsAcademic
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${SimulateDonationFunction}
+      RetentionInDays: 14
+
 Outputs:
   Region:
     Value: !Ref AWS::Region

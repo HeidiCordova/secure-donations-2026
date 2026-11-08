@@ -1,10 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { buildAuditEvent, outcomeFromError, type AuditLog } from '../audit/audit.js';
+import { buildAuditEvent, outcomeFromError, type AuditAction, type AuditLog } from '../audit/audit.js';
 import { getPrincipal, requireGroup, requireOwner, requireScope } from '../authz/principal.js';
 import { AppError } from '../shared/errors.js';
 import { getHeader, parseJsonBody, uuidPathParam, type ApiEvent } from '../shared/event.js';
 import { errorResponse, json, type HttpResponse } from '../shared/http.js';
-import { CreateDonationBodySchema, IdempotencyKeySchema, type Donation } from '../shared/schemas.js';
+import {
+  CreateDonationBodySchema,
+  IdempotencyKeySchema,
+  SimulateDonationBodySchema,
+  type Donation,
+} from '../shared/schemas.js';
 import { parseOrThrow } from '../shared/validation.js';
 import { expiresAtFrom, idempotencyPk, payloadHash, type IdempotencyRecord } from './idempotency.js';
 import type { DonationRepository } from './repository.js';
@@ -17,6 +22,8 @@ export interface DonationDeps {
   audit: AuditLog;
   now?: () => Date;
   newId?: () => string;
+  /** Stage de despliegue; la simulación solo existe en `academic` (CA-06.1). */
+  stage?: string | undefined;
 }
 
 /** Vista de una donación para su propio donante: campo por campo, sin atributos internos. */
@@ -49,13 +56,19 @@ export function makeDonationHandlers(deps: DonationDeps) {
   const now = deps.now ?? (() => new Date());
   const newId = deps.newId ?? (() => randomUUID());
 
-  async function recordFailure(event: ApiEvent, actorSub: string, resourceRef: string, error: unknown) {
+  async function recordFailure(
+    event: ApiEvent,
+    actorSub: string,
+    resourceRef: string,
+    error: unknown,
+    action: AuditAction = 'DONATION_CREATE',
+  ) {
     try {
       await deps.audit.record(
         buildAuditEvent({
           requestId: event.requestContext.requestId,
           actorSub,
-          action: 'DONATION_CREATE',
+          action,
           resourceRef,
           outcome: outcomeFromError(error),
           now: now(),
@@ -63,7 +76,7 @@ export function makeDonationHandlers(deps: DonationDeps) {
       );
     } catch {
       process.stderr.write(
-        `${JSON.stringify({ level: 'error', msg: 'audit_write_failed', action: 'DONATION_CREATE', requestId: event.requestContext.requestId })}\n`,
+        `${JSON.stringify({ level: 'error', msg: 'audit_write_failed', action, requestId: event.requestContext.requestId })}\n`,
       );
     }
   }
@@ -169,6 +182,63 @@ export function makeDonationHandlers(deps: DonationDeps) {
         const items = donations.filter((d) => d.donorSub === principal.sub).map(toDonationView);
         return json(200, { items });
       } catch (error) {
+        return errorResponse(error, requestId);
+      }
+    },
+
+    /**
+     * POST /v1/donations/{donationId}/simulate — solo stage `academic`, solo el DONANTE dueño (HU-06).
+     * Solo la primera transición válida cambia el total; las repetidas o concurrentes reciben 409 (CA-06.2, T08).
+     * Una rechazada no incrementa nada (CA-06.3).
+     */
+    async simulate(event: ApiEvent): Promise<HttpResponse> {
+      const requestId = event.requestContext.requestId;
+      let actorSub: string | undefined;
+      let resourceRef = 'donation:unknown';
+      try {
+        // Defensa en profundidad: la plantilla solo crea la ruta en academic; aquí se vuelve a comprobar.
+        if (deps.stage !== 'academic') {
+          throw new AppError('NOT_FOUND', 'Recurso no encontrado');
+        }
+        const principal = getPrincipal(event);
+        actorSub = principal.sub;
+        requireScope(principal, DONATIONS_WRITE_SCOPE);
+        requireGroup(principal, 'DONANTE');
+
+        const donationId = uuidPathParam(event, 'donationId');
+        resourceRef = `donation:${donationId}`;
+        const { outcome } = parseOrThrow(SimulateDonationBodySchema, parseJsonBody(event));
+
+        const donation = await deps.donations.getDonation(donationId);
+        if (donation === undefined) {
+          throw new AppError('NOT_FOUND', 'Recurso no encontrado');
+        }
+        requireOwner(principal, donation.donorSub);
+        if (donation.status !== 'PENDIENTE_SIMULACION') {
+          throw new AppError('INVALID_TRANSITION', 'La donación ya no está pendiente');
+        }
+
+        const timestamp = now();
+        const audit = buildAuditEvent({
+          requestId,
+          actorSub: principal.sub,
+          action: 'DONATION_SIMULATE',
+          resourceRef,
+          outcome: 'SUCCESS',
+          now: timestamp,
+        });
+        const updated = await deps.donations.simulateDonation({
+          donation,
+          outcome,
+          updatedAt: timestamp.toISOString(),
+          audit,
+        });
+        // Mismo contrato que docs/api.yaml (200 Donation). El aviso de CA-06.4 lo muestra la UI.
+        return json(200, toDonationView(updated));
+      } catch (error) {
+        if (actorSub !== undefined) {
+          await recordFailure(event, actorSub, resourceRef, error, 'DONATION_SIMULATE');
+        }
         return errorResponse(error, requestId);
       }
     },
