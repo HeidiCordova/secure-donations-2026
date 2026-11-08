@@ -54,6 +54,13 @@ npm run build
 - [Registro de MFA en AWS Settings](https://docs.aws.amazon.com/accounts/latest/reference/register-mfa-devices.html): MFA TOTP sobre el AWS Builder ID.
 - Evidencia: [`evidence/cuenta-aws/`](./evidence/cuenta-aws/)
 
+## MFA para roles privilegiados (CA-11.1)
+
+En Cognito el MFA se configura por user pool, no por grupo. El pool está en `OPTIONAL`, con TOTP como único segundo factor (sin SMS), y se aplica este control compensatorio:
+
+1. Cada usuario de GESTOR y AUDITOR registra una app autenticadora (TOTP) y la deja como método preferido; desde ahí Cognito le pide el código en cada inicio de sesión (T14).
+2. `scripts/check-mfa.sh <user-pool-id>` verifica que todos los usuarios de GESTOR y AUDITOR tengan TOTP activo, y falla si alguno no lo tiene.
+
 ## Despliegue
 
 Desde AWS CloudShell (región `us-east-2`, SAM CLI preinstalado, sin llaves de acceso):
