@@ -19,10 +19,18 @@ Parameters:
     Description: >-
       Origen HTTPS de la SPA en CloudFront (sale en el output WebUrl). Se completa después del
       primer despliegue para evitar una dependencia circular entre CloudFront, Cognito y el API.
+  MfaEnrollment:
+    Type: String
+    Default: closed
+    AllowedValues: [closed, open]
+    Description: >-
+      Abre temporalmente el scope aws.cognito.signin.user.admin para que GESTOR y AUDITOR enrolen
+      su TOTP. Fuera del enrolamiento queda en closed (CA-11.1, mínimo privilegio).
 
 Conditions:
   IsAcademic: !Equals [!Ref Stage, academic]
   HasWebOrigin: !Not [!Equals [!Ref WebOrigin, '']]
+  MfaEnrollmentOpen: !Equals [!Ref MfaEnrollment, open]
 
 Globals:
   Function:
@@ -135,6 +143,9 @@ Resources:
         - api/donations.write
         - api/donations.read
         - api/audit.read
+        # Solo mientras se enrola un TOTP (MfaEnrollment=open). Cerrado, un access token robado no puede
+        # llamar a SetUserMFAPreference para desactivar el MFA (CA-11.1).
+        - !If [MfaEnrollmentOpen, aws.cognito.signin.user.admin, !Ref AWS::NoValue]
       SupportedIdentityProviders: [COGNITO]
       CallbackURLs:
         - !Sub ${LocalOrigin}/callback
@@ -623,6 +634,155 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${PublishProjectFunction}
+      RetentionInDays: 14
+
+  # ---------------------------------------------------------------------------
+  # Módulo donations (HU-05, HU-07). Un rol IAM por función, sin comodines (CA-NF03.1).
+  # ---------------------------------------------------------------------------
+  CreateDonationFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: donations-create.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            # Clave + donación + ConditionCheck del proyecto + AuditEvent en un TransactWriteItems (AD-05)
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource: !GetAtt IdempotencyTable.Arn
+            - Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt DonationsTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:ConditionCheckItem
+              Resource: !GetAtt ProjectsTable.Arn
+            - Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt AuditEventsTable.Arn
+      Events:
+        CreateDonation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/donations
+            Method: POST
+            Auth:
+              Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - api/donations.write
+  CreateDonationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${CreateDonationFunction}
+      RetentionInDays: 14
+
+  ListMyDonationsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: donations-list-mine.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: dynamodb:Query
+              Resource: !Sub '${DonationsTable.Arn}/index/donorSub-createdAt'
+      Events:
+        ListMyDonations:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/donations/me
+            Method: GET
+            Auth:
+              Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - api/donations.read
+  ListMyDonationsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ListMyDonationsFunction}
+      RetentionInDays: 14
+
+  GetDonationFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: donations-get.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: dynamodb:GetItem
+              Resource: !GetAtt DonationsTable.Arn
+      Events:
+        GetDonation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/donations/{donationId}
+            Method: GET
+            Auth:
+              Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - api/donations.read
+  GetDonationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${GetDonationFunction}
+      RetentionInDays: 14
+
+  # Simulación académica (HU-06): la función y su ruta solo existen en el stage academic (CA-06.1).
+  SimulateDonationFunction:
+    Type: AWS::Serverless::Function
+    Condition: IsAcademic
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: donations-simulate.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            # Update condicionado de la donación + ADD en el proyecto + AuditEvent en un TransactWriteItems
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt DonationsTable.Arn
+            - Effect: Allow
+              Action: dynamodb:UpdateItem
+              Resource: !GetAtt ProjectsTable.Arn
+            - Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt AuditEventsTable.Arn
+      Events:
+        SimulateDonation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/donations/{donationId}/simulate
+            Method: POST
+            Auth:
+              Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - api/donations.write
+  SimulateDonationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: IsAcademic
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${SimulateDonationFunction}
       RetentionInDays: 14
 
 Outputs:

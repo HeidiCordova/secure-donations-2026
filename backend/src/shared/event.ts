@@ -5,6 +5,8 @@ import { AppError } from './errors.js';
 export interface ApiEvent extends JwtAuthorizedEvent {
   requestContext: JwtAuthorizedEvent['requestContext'] & { requestId: string };
   pathParameters?: Record<string, string | undefined> | undefined;
+  /** HTTP API entrega los nombres de cabecera en minúsculas. */
+  headers?: Record<string, string | undefined> | undefined;
   body?: string | null | undefined;
   isBase64Encoded?: boolean | undefined;
 }
@@ -34,4 +36,15 @@ export function parseJsonBody(event: ApiEvent): unknown {
   } catch {
     throw new AppError('VALIDATION_ERROR', 'Solicitud inválida');
   }
+}
+
+/** Lee una cabecera sin distinguir mayúsculas (HTTP API las normaliza a minúsculas). */
+export function getHeader(event: ApiEvent, name: string): string | undefined {
+  const wanted = name.toLowerCase();
+  for (const [key, value] of Object.entries(event.headers ?? {})) {
+    if (key.toLowerCase() === wanted) {
+      return value;
+    }
+  }
+  return undefined;
 }

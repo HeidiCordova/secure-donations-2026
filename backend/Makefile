@@ -25,3 +25,15 @@ build-CreateProjectFunction:
 
 build-PublishProjectFunction:
 > $(ESBUILD) src/handlers/projects-publish.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/projects-publish.mjs
+
+build-CreateDonationFunction:
+> $(ESBUILD) src/handlers/donations-create.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/donations-create.mjs
+
+build-ListMyDonationsFunction:
+> $(ESBUILD) src/handlers/donations-list-mine.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/donations-list-mine.mjs
+
+build-GetDonationFunction:
+> $(ESBUILD) src/handlers/donations-get.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/donations-get.mjs
+
+build-SimulateDonationFunction:
+> $(ESBUILD) src/handlers/donations-simulate.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/donations-simulate.mjs
