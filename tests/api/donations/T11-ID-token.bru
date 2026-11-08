@@ -1,0 +1,21 @@
+meta {
+  name: T11 - ID token sin scopes
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/v1/donations/me
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{idToken}}
+}
+
+tests {
+  test("El ID token válido sin scopes no autoriza la ruta", function() {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

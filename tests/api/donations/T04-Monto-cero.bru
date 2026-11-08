@@ -1,0 +1,33 @@
+meta {
+  name: T04 - Monto cero
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/v1/donations
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{donorAccessToken}}
+}
+
+headers {
+  Content-Type: application/json
+  Idempotency-Key: 00000000-0000-4000-8000-000000000040
+}
+
+body:json {
+  {
+    "projectId": "{{projectId}}",
+    "amountCents": 0
+  }
+}
+
+tests {
+  test("El monto cero se rechaza", function() {
+    expect(res.getStatus()).to.equal(400);
+  });
+}
