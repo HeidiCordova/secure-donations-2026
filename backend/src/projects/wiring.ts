@@ -22,13 +22,13 @@ const readOnlyAudit: AuditLog = {
 
 /**
  * Conecta los handlers con DynamoDB usando las tablas de la plantilla SAM.
- * - Lectura (list, get, stats): solo PROJECTS_TABLE.
- * - Escritura (create, publish): PROJECTS_TABLE y AUDIT_TABLE.
+ * - Lectura (list, get, stats): solo usa TABLE_PROJECTS.
+ * - Escritura (create, publish): TABLE_PROJECTS y TABLE_AUDIT.
  */
 export function createProjectHandlersFromEnv(options: { writes: boolean }) {
   const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-  const projectsTable = requireEnv('PROJECTS_TABLE');
-  const auditTable = options.writes ? requireEnv('AUDIT_TABLE') : undefined;
+  const projectsTable = requireEnv('TABLE_PROJECTS');
+  const auditTable = options.writes ? requireEnv('TABLE_AUDIT') : undefined;
   return makeProjectHandlers({
     projects: createDynamoProjectRepository({ client, projectsTable, auditTable }),
     audit: auditTable === undefined ? readOnlyAudit : createDynamoAuditLog(client, auditTable),
