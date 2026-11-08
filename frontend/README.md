@@ -1,75 +1,39 @@
-# React + TypeScript + Vite
+# AQP-SOLIDARIA — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+SPA de React, TypeScript, Vite y Tailwind CSS para consultar los proyectos solidarios y autenticarse con Amazon Cognito mediante OIDC Authorization Code + PKCE. Los tokens de usuario se mantienen en memoria y el estado temporal del flujo OIDC usa `sessionStorage`.
 
-Currently, two official plugins are available:
+## Requisitos
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js compatible con Vite 8.
+- npm.
+- URL de la API y una aplicación cliente de Cognito configuradas para el flujo Authorization Code, con las URI de retorno y cierre de sesión autorizadas.
 
-## React Compiler
+## Configuración
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Copia `.env.example` a `.env.local`.
+2. Completa las variables:
 
-## Expanding the ESLint configuration
+| Variable | Descripción |
+|---|---|
+| `VITE_API_URL` | URL base HTTPS de la API, sin `/` final. |
+| `VITE_COGNITO_AUTHORITY` | Emisor OIDC del User Pool, por ejemplo `https://cognito-idp.<region>.amazonaws.com/<user-pool-id>`. |
+| `VITE_COGNITO_DOMAIN` | Dominio Hosted UI de Cognito, con o sin `https://`. |
+| `VITE_COGNITO_CLIENT_ID` | ID de la aplicación cliente pública del SPA. |
+| `VITE_REDIRECT_URI` | URI de retorno OIDC registrada en Cognito (por ejemplo `http://localhost:5173/callback`). |
+| `VITE_LOGOUT_URI` | URI posterior al cierre de sesión registrada en Cognito (por ejemplo `http://localhost:5173/`). |
+| `VITE_SCOPES` | Scopes OIDC separados por espacios; normalmente `openid email profile`. |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+No agregues secretos ni credenciales AWS a las variables del frontend. Las variables `VITE_*` se incorporan al bundle del navegador.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Ejecución y validación
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Desde esta carpeta:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+npm install
+npm run dev
+npm run typecheck
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
+`npm run dev` inicia el servidor local de Vite; `npm run typecheck` valida TypeScript sin emitir archivos y `npm run build` ejecuta la compilación de TypeScript y genera el bundle en `dist/`.
