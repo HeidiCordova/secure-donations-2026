@@ -2,7 +2,9 @@
 # Se usa en lugar del builder esbuild de SAM para evitar su `npm install`
 # dentro del monorepo con workspaces (falla con "reading 'edgesOut'").
 .RECIPEPREFIX = >
-ESBUILD = npx --yes esbuild@0.28.2
+# Usa el esbuild local fijado en package-lock (requiere `npm ci` antes de `sam build`).
+.RECIPEPREFIX = >
+ESBUILD = npx --no esbuild
 ESBUILD_FLAGS = --bundle --platform=node --target=es2023 --format=esm --sourcemap
 
 build-HealthFunction:
