@@ -785,6 +785,37 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${SimulateDonationFunction}
       RetentionInDays: 14
 
+  # Auditoría (HU-10): solo lectura de AuditEvents, solo AUDITOR con api/audit.read (CA-10.1).
+  ListAuditEventsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../backend
+      Handler: audit-list.handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: dynamodb:Query
+              Resource: !GetAtt AuditEventsTable.Arn
+      Events:
+        ListAuditEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/audit
+            Method: GET
+            Auth:
+              Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - api/audit.read
+  ListAuditEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ListAuditEventsFunction}
+      RetentionInDays: 14
+
 Outputs:
   Region:
     Value: !Ref AWS::Region
