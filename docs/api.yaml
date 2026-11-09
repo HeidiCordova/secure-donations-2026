@@ -207,36 +207,54 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
-  /v1/audit:
-    get:
-      tags: [audit]
-      summary: Consulta eventos de auditoría (HU-10, extensión, solo AUDITOR)
-      security:
-        - cognito: [api/audit.read]
-      parameters:
-        - name: type
-          in: query
-          schema: { type: string }
-        - name: from
-          in: query
-          schema: { type: string, format: date-time }
-        - name: to
-          in: query
-          schema: { type: string, format: date-time }
-      responses:
-        '200':
-          description: Eventos sin tokens, claves ni datos financieros (CA-10.2)
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/AuditEvent' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+/v1/audit:
+  get:
+    tags: [audit]
+    summary: Consulta eventos de auditoría por tipo y rango de fechas (HU-10, solo AUDITOR)
+    description: |
+      Solo el grupo AUDITOR (con MFA TOTP) y el scope `api/audit.read` (CA-10.1).
+      Más recientes primero. Si hay más resultados, la respuesta incluye `nextToken` para pedir la página siguiente.
+      Los eventos no incluyen tokens, claves, cuerpos de solicitud ni datos financieros; el actor va seudonimizado (CA-10.2).
+    security:
+      - cognito: [api/audit.read]
+    parameters:
+      - name: type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum: [PROJECT_CREATE, PROJECT_PUBLISH, DONATION_CREATE, DONATION_SIMULATE]
+      - name: from
+        in: query
+        description: Inicio del rango (inclusive), ISO 8601
+        schema: { type: string, format: date-time }
+      - name: to
+        in: query
+        description: Fin del rango (inclusive), ISO 8601
+        schema: { type: string, format: date-time }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      - name: nextToken
+        in: query
+        description: Token opaco devuelto por la página anterior (solo válido para el mismo `type`)
+        schema: { type: string, maxLength: 2048 }
+    responses:
+      '200':
+        description: Página de eventos
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: { $ref: '#/components/schemas/AuditEvent' }
+                nextToken: { type: string }
+      '400': { $ref: '#/components/responses/BadRequest' }
+      '401': { $ref: '#/components/responses/Unauthorized' }
+      '403': { $ref: '#/components/responses/Forbidden' }
 
 components:
   securitySchemes:

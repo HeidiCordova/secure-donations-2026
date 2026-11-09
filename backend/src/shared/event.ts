@@ -5,6 +5,7 @@ import { AppError } from './errors.js';
 export interface ApiEvent extends JwtAuthorizedEvent {
   requestContext: JwtAuthorizedEvent['requestContext'] & { requestId: string };
   pathParameters?: Record<string, string | undefined> | undefined;
+  queryStringParameters?: Record<string, string | undefined> | undefined;
   /** HTTP API entrega los nombres de cabecera en minúsculas. */
   headers?: Record<string, string | undefined> | undefined;
   body?: string | null | undefined;
