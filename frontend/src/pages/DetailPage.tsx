@@ -1,29 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ErrorMessage } from '../components/ErrorMessage';
-import {
-  formatPEN,
-  getErrorMessage,
-  getErrorStatus,
-  getJson,
-  type Project,
-  type ProjectStats,
-} from '../services/projects';
+import { formatPEN, getErrorMessage, getJson, type Project, type ProjectStats } from '../services/projects';
 
 interface ProjectDetail {
   project: Project;
   stats: ProjectStats;
 }
 
-interface DetailPageProps {
-  onLogin: () => void;
-}
-
-export function DetailPage({ onLogin }: DetailPageProps) {
+export function DetailPage() {
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) {
@@ -38,60 +25,44 @@ export function DetailPage({ onLogin }: DetailPageProps) {
       .then(([project, stats]) => setDetail({ project, stats }))
       .catch((requestError: unknown) => {
         if (!controller.signal.aborted) {
-          setError(requestError);
+          setError(getErrorMessage(requestError));
         }
       });
 
     return () => controller.abort();
-  }, [id, retryCount]);
+  }, [id]);
 
   if (!id) {
     return (
-      <ErrorMessage
-        actionLabel="Volver al catálogo"
-        actionTo="/"
-        description="El enlace no incluye un proyecto. Vuelve al catálogo para elegir uno."
-        status={404}
-      />
+      <section className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+        <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800" role="alert">
+          No se indicó el identificador del proyecto.
+        </p>
+        <Link className="mt-6 inline-block font-semibold text-emerald-800 underline" to="/">
+          Volver al catálogo
+        </Link>
+      </section>
     );
   }
 
   if (error) {
     return (
-      <ErrorMessage
-        description={getErrorMessage(error)}
-        onLogin={onLogin}
-        onRetry={() => {
-          setError(null);
-          setDetail(null);
-          setRetryCount((count) => count + 1);
-        }}
-        status={getErrorStatus(error)}
-      />
+      <section className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+        <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800" role="alert">
+          No se pudo cargar el proyecto: {error}
+        </p>
+        <Link className="mt-6 inline-block font-semibold text-emerald-800 underline" to="/">
+          Volver al catálogo
+        </Link>
+      </section>
     );
   }
 
   if (!detail) {
     return (
-      <section aria-label="Cargando proyecto" aria-live="polite" className="animate-pulse" role="status">
-        <div aria-hidden="true">
-          <div className="h-4 w-40 rounded bg-slate-200" />
-          <div className="mt-3 h-10 w-2/3 rounded bg-slate-200" />
-          <div className="mt-6 space-y-3">
-            <div className="h-5 rounded bg-slate-200" />
-            <div className="h-5 rounded bg-slate-200" />
-            <div className="h-5 w-3/4 rounded bg-slate-200" />
-          </div>
-          <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
-            <div className="flex justify-between gap-4">
-              <div className="h-4 w-36 rounded bg-slate-200" />
-              <div className="h-4 w-28 rounded bg-slate-200" />
-            </div>
-            <div className="mt-4 h-3 rounded-full bg-slate-200" />
-            <div className="mt-2 ml-auto h-4 w-16 rounded bg-slate-200" />
-          </div>
-        </div>
-      </section>
+      <p className="mx-auto max-w-4xl px-4 py-10 text-slate-600" role="status">
+        Cargando proyecto…
+      </p>
     );
   }
 
@@ -103,7 +74,7 @@ export function DetailPage({ onLogin }: DetailPageProps) {
   const roundedPercentage = Math.round(percentage);
 
   return (
-    <article>
+    <article className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
       <Link className="font-semibold text-emerald-800 underline" to="/">
         ← Volver al catálogo
       </Link>

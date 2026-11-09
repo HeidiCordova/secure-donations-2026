@@ -19,50 +19,21 @@ export interface ProjectStats {
 
 const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, '');
 
-class ApiError extends Error {
-  readonly status: number;
-
-  constructor(status: number) {
-    super('La solicitud a la API no se completó.');
-    this.name = 'ApiError';
-    this.status = status;
-  }
-}
-
 export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!apiBaseUrl) {
-    throw new Error('La API no está disponible.');
+    throw new Error('Falta configurar la variable de entorno VITE_API_URL.');
   }
 
   const response = await fetch(`${apiBaseUrl}${path}`, { signal });
   if (!response.ok) {
-    throw new ApiError(response.status);
+    throw new Error(`La API respondió con el estado HTTP ${response.status}.`);
   }
 
   return (await response.json()) as T;
 }
 
 export function getErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    switch (error.status) {
-      case 401:
-        return 'Tu sesión ha expirado o no has iniciado sesión. Por favor, ingresa con tu cuenta.';
-      case 403:
-        return 'No tienes permisos para realizar esta acción o acceder a este recurso.';
-      case 404:
-        return 'El recurso o proyecto solicitado no se encuentra disponible.';
-      case 409:
-        return 'La operación ya fue procesada o se detectó un conflicto. Intenta nuevamente.';
-      default:
-        return 'Ocurrió un inconveniente temporal. Inténtalo más tarde.';
-    }
-  }
-
-  return 'Ocurrió un inconveniente temporal. Inténtalo más tarde.';
-}
-
-export function getErrorStatus(error: unknown): number | undefined {
-  return error instanceof ApiError ? error.status : undefined;
+  return error instanceof Error ? error.message : 'Ocurrió un error inesperado al comunicarse con el servicio.';
 }
 
 export function formatPEN(amountCents: number): string {

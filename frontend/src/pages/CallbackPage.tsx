@@ -21,7 +21,7 @@ export function CallbackPage() {
   }, [navigate]);
 
   return (
-    <section className="py-8 text-center">
+    <section className="mx-auto max-w-xl px-4 py-16 text-center">
       {error ? (
         <>
           <h1 className="text-2xl font-bold text-slate-900">No se pudo iniciar sesión</h1>
