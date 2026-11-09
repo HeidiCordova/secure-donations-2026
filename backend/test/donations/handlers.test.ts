@@ -142,12 +142,30 @@ describe('POST /v1/donations (HU-05)', () => {
     const body = JSON.parse(response.body) as Donation;
     expect(body).toMatchObject({
       projectId: PUBLISHED_ID,
-      donorSub: 'ana-sub',
       amountCents: 2500,
       currency: 'PEN',
       status: 'PENDIENTE_SIMULACION',
     });
     expect(repo.donations.size).toBe(1);
+    // Se guarda con el sub del token, pero no se devuelve en la respuesta (CA-NF10.1)
+    expect([...repo.donations.values()][0]?.donorSub).toBe('ana-sub');
+    expect(body).not.toHaveProperty('donorSub');
+  });
+
+  it('ninguna respuesta de donaciones incluye donorSub', async () => {
+    const { handlers } = setup();
+    const created = await handlers.create(event({ claims: ana, body: validBody, key: KEY }));
+    const replay = await handlers.create(event({ claims: ana, body: validBody, key: KEY }));
+    const id = (JSON.parse(created.body) as Donation).donationId;
+    const one = await handlers.get(event({ claims: ana, donationId: id }));
+    const mine = await handlers.listMine(event({ claims: ana }));
+    const simulated = await handlers.simulate(
+      event({ claims: ana, donationId: id, body: { outcome: 'CONFIRMADA_SIMULADA' } }),
+    );
+    for (const response of [created, replay, one, mine, simulated]) {
+      expect(response.body).not.toContain('donorSub');
+      expect(response.body).not.toContain('ana-sub');
+    }
   });
 
   it('acepta la cabecera con cualquier combinación de mayúsculas', async () => {
@@ -317,13 +335,13 @@ describe('Idempotencia (CA-05.4)', () => {
 describe('GET /v1/donations/me (HU-07)', () => {
   it('devuelve solo las donaciones del sub autenticado (CA-07.1)', async () => {
     const { handlers } = setup();
-    await handlers.create(event({ claims: ana, body: validBody, key: KEY }));
+    const own = await handlers.create(event({ claims: ana, body: validBody, key: KEY }));
     await handlers.create(event({ claims: beto, body: validBody, key: OTHER_KEY }));
     const response = await handlers.listMine(event({ claims: ana }));
     expect(response.statusCode).toBe(200);
     const { items } = JSON.parse(response.body) as { items: Donation[] };
     expect(items).toHaveLength(1);
-    expect(items.every((d) => d.donorSub === 'ana-sub')).toBe(true);
+    expect(items[0]?.donationId).toBe((JSON.parse(own.body) as Donation).donationId);
   });
 
   it('sin donaciones devuelve lista vacía', async () => {
