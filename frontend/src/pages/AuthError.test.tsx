@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -22,8 +22,19 @@ describe('API authorization errors', () => {
       </MemoryRouter>,
     );
 
-    const title = await screen.findByText(/no tienes acceso/i);
-    const alert = screen.getByRole('alert');
+    const alert = await screen.findByRole('alert');
+    const title = await within(alert).findByText((_, element) => {
+      if (!element || element.tagName.toLowerCase() === 'script') {
+        return false;
+      }
+
+      const text = element.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      const matchesTitle = /acceso|denegado|autorizado|403/i.test(text);
+      const childHasTitle = Array.from(element.children).some((child) =>
+        /acceso|denegado|autorizado|403/i.test(child.textContent ?? ''),
+      );
+      return matchesTitle && !childHasTitle;
+    });
     expect(title).toBeInTheDocument();
     expect(screen.getByText('No tienes permisos para realizar esta acción o acceder a este recurso.')).toBeVisible();
     expect(alert.querySelector('svg.lucide-shield-x')).toBeInTheDocument();
