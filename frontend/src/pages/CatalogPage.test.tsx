@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitForElementToBeRemoved } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { CatalogPage } from './CatalogPage';
@@ -11,6 +11,8 @@ describe('CatalogPage', () => {
       </MemoryRouter>,
     );
 
+    expect(screen.getByRole('status', { name: 'Cargando proyectos' })).toBeInTheDocument();
+    await waitForElementToBeRemoved(() => screen.queryByRole('status', { name: 'Cargando proyectos' }));
     expect(await screen.findByRole('heading', { name: 'Biblioteca comunitaria' })).toBeInTheDocument();
     expect(screen.getByText('Libros y espacios de lectura para el barrio.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver proyecto' })).toHaveAttribute('href', '/proyecto/project-1');
