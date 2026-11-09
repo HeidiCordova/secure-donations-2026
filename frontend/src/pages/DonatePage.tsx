@@ -130,7 +130,24 @@ export function DonatePage({ onLogin }: DonationPageProps) {
           status={getErrorStatus(projectsError)}
         />
       )}
-      {!projectsError && projects === null && <p role="status">Cargando proyectos…</p>}
+      {!projectsError && projects === null && (
+        <div
+          aria-label="Cargando formulario de donación"
+          className="animate-pulse space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+          role="status"
+        >
+          <div className="h-5 w-1/3 rounded bg-slate-200" />
+          <div className="space-y-2">
+            <div className="h-4 w-24 rounded bg-slate-200" />
+            <div className="h-11 rounded-lg bg-slate-200" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-4 w-20 rounded bg-slate-200" />
+            <div className="h-11 rounded-lg bg-slate-200" />
+          </div>
+          <div className="h-11 rounded-lg bg-slate-300" />
+        </div>
+      )}
       {!projectsError && projects?.length === 0 && (
         <ErrorMessage
           actionLabel="Actualizar catálogo"
