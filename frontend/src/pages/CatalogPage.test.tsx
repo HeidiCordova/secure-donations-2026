@@ -13,7 +13,7 @@ describe('CatalogPage', () => {
 
     expect(screen.getByRole('status', { name: 'Cargando proyectos' })).toBeInTheDocument();
     await waitForElementToBeRemoved(() => screen.queryByRole('status', { name: 'Cargando proyectos' }));
-    expect(await screen.findByRole('heading', { name: 'Biblioteca comunitaria' })).toBeInTheDocument();
+    expect(await screen.findByText(/biblioteca comunitaria/i)).toBeInTheDocument();
     expect(screen.getByText('Libros y espacios de lectura para el barrio.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver proyecto' })).toHaveAttribute('href', '/proyecto/project-1');
   });

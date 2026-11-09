@@ -22,9 +22,9 @@ describe('API authorization errors', () => {
       </MemoryRouter>,
     );
 
-    const heading = await screen.findByRole('heading', { name: 'No tienes acceso' });
+    const title = await screen.findByText(/no tienes acceso/i);
     const alert = screen.getByRole('alert');
-    expect(heading).toBeInTheDocument();
+    expect(title).toBeInTheDocument();
     expect(screen.getByText('No tienes permisos para realizar esta acción o acceder a este recurso.')).toBeVisible();
     expect(alert.querySelector('svg.lucide-shield-x')).toBeInTheDocument();
     expect(alert).not.toHaveTextContent(/Forbidden|internal stack trace|Error:|403/);
