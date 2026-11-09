@@ -15,12 +15,54 @@ servers:
       apiId:
         default: example
 tags:
+  - name: system
   - name: projects
   - name: donations
   - name: audit
 security: []
 
 paths:
+  /v1/health:
+    get:
+      tags: [system]
+      summary: Verifica que el despliegue responde (público)
+      security: []
+      responses:
+        '200':
+          description: API operativa
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+
+  /v1/whoami:
+    get:
+      tags: [system]
+      summary: Identidad derivada de los claims verificados (ruta de diagnóstico, T02 y T11)
+      description: |
+        Devuelve solo la identidad del propio solicitante a partir de claims que ya validó el JWT authorizer;
+        nunca el token. Sirve para comprobar el login y los grupos de Cognito.
+      security:
+        - cognito: [api/donations.read]
+      responses:
+        '200':
+          description: Identidad verificada del solicitante
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sub, groups, requestId]
+                properties:
+                  sub: { type: string, description: Identificador del propio usuario en Cognito }
+                  groups:
+                    type: array
+                    items: { type: string, enum: [DONANTE, GESTOR, AUDITOR] }
+                  requestId: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /v1/projects:
     get:
       tags: [projects]
@@ -328,11 +370,13 @@ components:
         currency: { $ref: '#/components/schemas/Currency' }
     Donation:
       type: object
-      required: [donationId, projectId, donorSub, amountCents, currency, status, createdAt, updatedAt]
+      description: |
+        Donación vista por su propio donante. No incluye `donorSub`: el servidor lo toma del token
+        y lo guarda, pero no lo devuelve (minimización de datos, CA-NF10.1).
+      required: [donationId, projectId, amountCents, currency, status, createdAt, updatedAt]
       properties:
         donationId: { type: string, format: uuid }
         projectId: { type: string, format: uuid }
-        donorSub: { type: string }
         amountCents: { type: integer, minimum: 100, maximum: 100000 }
         currency: { $ref: '#/components/schemas/Currency' }
         status: { $ref: '#/components/schemas/DonationStatus' }
