@@ -78,6 +78,15 @@ sam deploy
 
 ```
 
+### Frontend
+
+```bash
+cd frontend && npm run build && cd ..
+scripts/deploy-web.sh            # o: scripts/deploy-web.sh <carpeta-del-build>
+```
+
+Sube el build al bucket privado (assets con caché larga, `index.html` sin caché) e invalida CloudFront. Requiere credenciales de AWS (por ejemplo, desde CloudShell).
+
 - Las Lambdas se compilan con `backend/Makefile` (esbuild) en lugar del builder esbuild de SAM, que falla con los workspaces de npm.
 - Outputs del stack: `ApiUrl`, `UserPoolId`, `UserPoolClientId`, `CognitoDomain`.
 - Usuarios de prueba: uno por rol, creados con `aws cognito-idp admin-create-user`. Las contraseñas no se guardan en el repositorio.
