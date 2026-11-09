@@ -7,7 +7,11 @@ meta {
 post {
   url: {{baseUrl}}/v1/projects
   body: json
-  auth: inherit
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{donorAccessToken}}
 }
 
 headers {
