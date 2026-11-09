@@ -26,12 +26,17 @@ export interface DonationDeps {
   stage?: string | undefined;
 }
 
-/** Vista de una donación para su propio donante: campo por campo, sin atributos internos. */
-export function toDonationView(donation: Donation): Donation {
+/**
+ * Vista de una donación para su propio donante: campo por campo, sin atributos internos.
+ * No incluye `donorSub`: el cliente ya sabe quién es y así el identificador de Cognito
+ * no viaja en las respuestas (minimización de datos, CA-NF10.1).
+ */
+export type DonationView = Omit<Donation, 'donorSub'>;
+
+export function toDonationView(donation: Donation): DonationView {
   return {
     donationId: donation.donationId,
     projectId: donation.projectId,
-    donorSub: donation.donorSub,
     amountCents: donation.amountCents,
     currency: donation.currency,
     status: donation.status,
