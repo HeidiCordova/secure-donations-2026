@@ -9,7 +9,12 @@ interface ProjectsResponse {
 
 function CatalogSkeleton() {
   return (
-    <div aria-label="Cargando proyectos" aria-live="polite" className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" role="status">
+    <div
+      aria-label="Cargando proyectos"
+      aria-live="polite"
+      className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+      role="status"
+    >
       {[0, 1, 2].map((card) => (
         <article
           aria-hidden="true"

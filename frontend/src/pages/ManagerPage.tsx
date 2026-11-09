@@ -91,7 +91,10 @@ export function ManagerPage({ onLogin }: ManagerPageProps) {
         />
       )}
 
-      <form className="mb-10 max-w-2xl space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm" onSubmit={(event) => void createProject(event)}>
+      <form
+        className="mb-10 max-w-2xl space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+        onSubmit={(event) => void createProject(event)}
+      >
         <h2 className="text-xl font-semibold text-slate-900">Crear proyecto</h2>
         <label className="block text-sm font-semibold text-slate-800">
           Título

@@ -23,12 +23,7 @@ interface AuditPageProps {
   onLogin: () => void;
 }
 
-const actions: AuditAction[] = [
-  'PROJECT_CREATE',
-  'PROJECT_PUBLISH',
-  'DONATION_CREATE',
-  'DONATION_SIMULATE',
-];
+const actions: AuditAction[] = ['PROJECT_CREATE', 'PROJECT_PUBLISH', 'DONATION_CREATE', 'DONATION_SIMULATE'];
 
 export function AuditPage({ onLogin }: AuditPageProps) {
   const [action, setAction] = useState<AuditAction>('PROJECT_CREATE');
@@ -89,11 +84,7 @@ export function AuditPage({ onLogin }: AuditPageProps) {
       )}
       {!error && events === null && <p role="status">Cargando auditoría…</p>}
       {events?.length === 0 && (
-        <ErrorMessage
-          description="No hay eventos de este tipo para mostrar."
-          title="Sin eventos"
-          variant="empty"
-        />
+        <ErrorMessage description="No hay eventos de este tipo para mostrar." title="Sin eventos" variant="empty" />
       )}
       {events && events.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">

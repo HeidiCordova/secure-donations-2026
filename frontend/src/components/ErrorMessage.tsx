@@ -1,12 +1,4 @@
-import {
-  AlertTriangle,
-  FolderOpen,
-  FolderSearch,
-  Lock,
-  RotateCcw,
-  ShieldX,
-  WifiOff,
-} from 'lucide-react';
+import { AlertTriangle, FolderOpen, FolderSearch, Lock, RotateCcw, ShieldX, WifiOff } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 interface ErrorMessageProps {
@@ -83,7 +75,10 @@ export function ErrorMessage({
   }
 
   return (
-    <section className="flex min-h-[50vh] items-center justify-center py-8" role={variant === 'error' ? 'alert' : 'status'}>
+    <section
+      className="flex min-h-[50vh] items-center justify-center py-8"
+      role={variant === 'error' ? 'alert' : 'status'}
+    >
       <div className="mx-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-emerald-700">
           <Icon aria-hidden="true" className="h-8 w-8" strokeWidth={1.8} />

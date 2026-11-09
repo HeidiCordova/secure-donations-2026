@@ -89,11 +89,7 @@ export function getAuthenticatedJson<T>(path: string, signal?: AbortSignal): Pro
   return requestJson<T>(path, { authenticated: true, signal });
 }
 
-export function postAuthenticatedJson<T>(
-  path: string,
-  body: unknown,
-  headers?: HeadersInit,
-): Promise<T> {
+export function postAuthenticatedJson<T>(path: string, body: unknown, headers?: HeadersInit): Promise<T> {
   return requestJson<T>(path, { authenticated: true, body, headers, method: 'POST' });
 }
 

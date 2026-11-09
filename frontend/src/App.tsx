@@ -18,7 +18,9 @@ function getUserRole(user: User | null): UserRole | null {
   if (!Array.isArray(groups)) {
     return null;
   }
-  return groups.find((group): group is UserRole => group === 'DONANTE' || group === 'GESTOR' || group === 'AUDITOR') ?? null;
+  return (
+    groups.find((group): group is UserRole => group === 'DONANTE' || group === 'GESTOR' || group === 'AUDITOR') ?? null
+  );
 }
 
 function getDisplayName(user: User): string {
