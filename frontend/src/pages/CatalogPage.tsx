@@ -1,14 +1,50 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { formatPEN, getErrorMessage, getJson, type Project } from '../services/projects';
+import { ErrorMessage } from '../components/ErrorMessage';
+import { formatPEN, getErrorMessage, getErrorStatus, getJson, type Project } from '../services/projects';
 
 interface ProjectsResponse {
   items: Project[];
 }
 
-export function CatalogPage() {
+function CatalogSkeleton() {
+  return (
+    <div aria-label="Cargando proyectos" aria-live="polite" className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" role="status">
+      {[0, 1, 2].map((card) => (
+        <article
+          aria-hidden="true"
+          className="animate-pulse flex flex-col rounded-xl border border-slate-200 bg-slate-200 p-6 shadow-sm"
+          key={card}
+        >
+          <div className="h-6 w-3/4 rounded bg-slate-300" />
+          <div className="mt-4 flex-1 space-y-2">
+            <div className="h-4 rounded bg-slate-300" />
+            <div className="h-4 rounded bg-slate-300" />
+            <div className="h-4 w-2/3 rounded bg-slate-300" />
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            {[0, 1].map((amount) => (
+              <div className="space-y-2 rounded-lg bg-slate-100 p-3" key={amount}>
+                <div className="h-3 w-2/3 rounded bg-slate-200" />
+                <div className="h-5 w-3/4 rounded bg-slate-200" />
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 h-11 rounded-lg bg-slate-300" />
+        </article>
+      ))}
+    </div>
+  );
+}
+
+interface CatalogPageProps {
+  onLogin: () => void;
+}
+
+export function CatalogPage({ onLogin }: CatalogPageProps) {
   const [projects, setProjects] = useState<Project[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -16,15 +52,15 @@ export function CatalogPage() {
       .then(({ items }) => setProjects(items))
       .catch((requestError: unknown) => {
         if (!controller.signal.aborted) {
-          setError(getErrorMessage(requestError));
+          setError(requestError);
         }
       });
 
     return () => controller.abort();
-  }, []);
+  }, [retryCount]);
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+    <section>
       <header className="mb-8">
         <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-700">AQP-SOLIDARIA</p>
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Catálogo de proyectos</h1>
@@ -33,20 +69,27 @@ export function CatalogPage() {
         </p>
       </header>
 
-      {error && (
-        <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800" role="alert">
-          No se pudo cargar el catálogo: {error}
-        </p>
+      {error !== null && (
+        <ErrorMessage
+          description={getErrorMessage(error)}
+          onLogin={onLogin}
+          onRetry={() => {
+            setError(null);
+            setProjects(null);
+            setRetryCount((count) => count + 1);
+          }}
+          status={getErrorStatus(error)}
+        />
       )}
-      {!error && projects === null && (
-        <p className="text-slate-600" role="status">
-          Cargando proyectos…
-        </p>
-      )}
+      {!error && projects === null && <CatalogSkeleton />}
       {!error && projects?.length === 0 && (
-        <p className="rounded-lg border border-slate-200 bg-white p-6 text-slate-600">
-          No hay proyectos publicados por el momento.
-        </p>
+        <ErrorMessage
+          actionLabel="Actualizar catálogo"
+          description="Estamos preparando nuevas iniciativas solidarias. Vuelve pronto para descubrirlas."
+          onAction={() => setRetryCount((count) => count + 1)}
+          title="No hay proyectos disponibles"
+          variant="empty"
+        />
       )}
 
       {projects && projects.length > 0 && (

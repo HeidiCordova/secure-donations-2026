@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { User } from 'oidc-client-ts';
-import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom';
 import { login, logout, userManager } from './auth/authConfig';
 import { CatalogPage } from './pages/CatalogPage';
 import { CallbackPage } from './pages/CallbackPage';
@@ -11,6 +11,7 @@ import { ManagerPage } from './pages/ManagerPage';
 import { getErrorMessage } from './services/projects';
 
 function ApplicationRoutes() {
+  const { pathname } = useLocation();
   const [user, setUser] = useState<User | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authActionPending, setAuthActionPending] = useState(false);
@@ -67,23 +68,30 @@ function ApplicationRoutes() {
   return (
     <>
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
           <Link className="text-lg font-bold tracking-tight text-emerald-800" to="/">
             AQP-SOLIDARIA
           </Link>
           <nav aria-label="Navegación principal" className="flex flex-wrap items-center gap-4 text-sm">
-            <Link className="font-medium text-slate-700 hover:text-emerald-800" to="/">
-              Catálogo
-            </Link>
-            <Link className="font-medium text-slate-700 hover:text-emerald-800" to="/donar">
-              Donar
-            </Link>
-            <Link className="font-medium text-slate-700 hover:text-emerald-800" to="/historial">
-              Mi historial
-            </Link>
-            <Link className="font-medium text-slate-700 hover:text-emerald-800" to="/gestor">
-              Gestor
-            </Link>
+            {[
+              { label: 'Catálogo', to: '/', active: pathname === '/' || pathname.startsWith('/proyecto/') },
+              { label: 'Donar', to: '/donar', active: pathname === '/donar' },
+              { label: 'Mi historial', to: '/historial', active: pathname === '/historial' },
+              { label: 'Gestor', to: '/gestor', active: pathname === '/gestor' },
+            ].map(({ label, to, active }) => (
+              <Link
+                aria-current={active ? 'page' : undefined}
+                className={`border-b-2 py-1 hover:text-emerald-800 ${
+                  active
+                    ? 'border-emerald-700 font-bold text-emerald-800'
+                    : 'border-transparent font-medium text-slate-700'
+                }`}
+                key={to}
+                to={to}
+              >
+                {label}
+              </Link>
+            ))}
             {user ? (
               <button
                 className="min-h-10 rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:opacity-60"
@@ -107,14 +115,14 @@ function ApplicationRoutes() {
         </div>
       </header>
       {authError && (
-        <p className="mx-auto mt-4 max-w-6xl px-4 text-sm text-red-800" role="alert">
+        <p className="mx-auto mt-4 max-w-6xl px-6 text-sm text-red-800" role="alert">
           Error de autenticación: {authError}
         </p>
       )}
-      <main>
+      <main className="mx-auto max-w-6xl px-6 py-8">
         <Routes>
-          <Route element={<CatalogPage />} path="/" />
-          <Route element={<DetailPage />} path="/proyecto/:id" />
+          <Route element={<CatalogPage onLogin={() => void handleLogin()} />} path="/" />
+          <Route element={<DetailPage onLogin={() => void handleLogin()} />} path="/proyecto/:id" />
           <Route element={<CallbackPage />} path="/callback" />
           <Route element={<DonatePage />} path="/donar" />
           <Route element={<HistoryPage />} path="/historial" />
