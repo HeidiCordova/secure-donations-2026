@@ -9,3 +9,15 @@ get {
   body: none
   auth: none
 }
+
+tests {
+  test("El catálogo público responde y permite preparar las pruebas", function() {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.items).to.be.an("array");
+    if (body.items.length > 0) {
+      bru.setVar("projectId", body.items[0].projectId);
+      bru.setVar("idempotencyKey", "00000000-0000-4000-8000-000000000050");
+    }
+  });
+}

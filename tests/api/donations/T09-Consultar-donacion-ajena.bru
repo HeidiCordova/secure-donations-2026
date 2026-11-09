@@ -1,0 +1,25 @@
+meta {
+  name: T09 - Consultar donación ajena
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/v1/donations/{{donationId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{secondDonorAccessToken}}
+}
+
+tests {
+  test("Una donación ajena no se revela", function() {
+    expect(res.getStatus()).to.be.oneOf([403, 404]);
+    const body = res.getBody();
+    expect(body).to.not.have.property("donationId");
+    expect(body).to.not.have.property("donorSub");
+    expect(body).to.not.have.property("amountCents");
+  });
+}

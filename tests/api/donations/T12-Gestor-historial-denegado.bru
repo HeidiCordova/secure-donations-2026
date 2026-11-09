@@ -1,0 +1,21 @@
+meta {
+  name: T12 - Gestor no consulta historial de donante
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/v1/donations/me
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{gestorAccessToken}}
+}
+
+tests {
+  test("Un GESTOR no obtiene el historial privado de donaciones", function() {
+    expect(res.getStatus()).to.be.oneOf([403, 404]);
+  });
+}

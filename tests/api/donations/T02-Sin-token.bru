@@ -1,0 +1,17 @@
+meta {
+  name: T02 - Sin token consulta historial
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v1/donations/me
+  body: none
+  auth: none
+}
+
+tests {
+  test("Una ruta protegida rechaza solicitudes sin token", function() {
+    expect(res.getStatus()).to.equal(401);
+  });
+}
