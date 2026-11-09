@@ -34,3 +34,6 @@ build-ListMyDonationsFunction:
 
 build-GetDonationFunction:
 > $(ESBUILD) src/handlers/donations-get.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/donations-get.mjs
+
+build-SimulateDonationFunction:
+> $(ESBUILD) src/handlers/donations-simulate.ts $(ESBUILD_FLAGS) --outfile=$(ARTIFACTS_DIR)/donations-simulate.mjs

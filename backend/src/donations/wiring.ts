@@ -19,18 +19,24 @@ const readOnlyAudit: AuditLog = {
   },
 };
 
+export type DonationFunctionMode = 'read' | 'create' | 'simulate';
+
 /**
- * Conecta los handlers con DynamoDB usando las tablas de la plantilla SAM.
- * - Lectura (listMine, get): solo TABLE_DONATIONS.
- * - Creación: TABLE_DONATIONS, TABLE_IDEMPOTENCY, TABLE_PROJECTS y TABLE_AUDIT.
+ * Conecta los handlers con DynamoDB usando las tablas de la plantilla SAM. Cada función recibe
+ * solo las tablas que usa (CA-NF03.1):
+ * - read (listMine, get): TABLE_DONATIONS.
+ * - create: TABLE_DONATIONS, TABLE_IDEMPOTENCY, TABLE_PROJECTS y TABLE_AUDIT.
+ * - simulate: TABLE_DONATIONS, TABLE_PROJECTS y TABLE_AUDIT.
  */
-export function createDonationHandlersFromEnv(options: { writes: boolean }) {
+export function createDonationHandlersFromEnv(options: { mode: DonationFunctionMode }) {
   const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
   const donationsTable = requireEnv('TABLE_DONATIONS');
-  if (!options.writes) {
+  const stage = process.env['STAGE'];
+  if (options.mode === 'read') {
     return makeDonationHandlers({
       donations: createDynamoDonationRepository({ client, donationsTable }),
       audit: readOnlyAudit,
+      stage,
     });
   }
   const auditTable = requireEnv('TABLE_AUDIT');
@@ -38,10 +44,11 @@ export function createDonationHandlersFromEnv(options: { writes: boolean }) {
     donations: createDynamoDonationRepository({
       client,
       donationsTable,
-      idempotencyTable: requireEnv('TABLE_IDEMPOTENCY'),
+      idempotencyTable: options.mode === 'create' ? requireEnv('TABLE_IDEMPOTENCY') : undefined,
       projectsTable: requireEnv('TABLE_PROJECTS'),
       auditTable,
     }),
     audit: createDynamoAuditLog(client, auditTable),
+    stage,
   });
 }

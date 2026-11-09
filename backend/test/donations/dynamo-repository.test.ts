@@ -132,6 +132,42 @@ describe('createDynamoDonationRepository', () => {
   });
 });
 
+describe('simulateDonation', () => {
+  it('confirmar: update condicionado de la donación + ADD en el proyecto + AuditEvent en una transacción', async () => {
+    const { client, sent } = fakeClient([{}]);
+    const repo = createDynamoDonationRepository({ client, ...tables });
+    const result = await repo.simulateDonation({ donation, outcome: 'CONFIRMADA_SIMULADA', updatedAt: 'x', audit });
+    expect(result.status).toBe('CONFIRMADA_SIMULADA');
+    const items = (sent[0] as TransactWriteCommand).input.TransactItems ?? [];
+    expect(items).toHaveLength(3);
+    expect(items[0]?.Update?.ConditionExpression).toBe('#status = :pending AND donorSub = :sub');
+    expect(items[1]?.Update?.TableName).toBe('Projects');
+    expect(items[1]?.Update?.UpdateExpression).toContain('ADD confirmedAmountCents :amount');
+    expect(items[1]?.Update?.ExpressionAttributeValues?.[':amount']).toBe(2500);
+    expect(items[2]?.Put?.TableName).toBe('AuditEvents');
+  });
+
+  it('rechazar no toca el proyecto (CA-06.3)', async () => {
+    const { client, sent } = fakeClient([{}]);
+    const repo = createDynamoDonationRepository({ client, ...tables });
+    await repo.simulateDonation({ donation, outcome: 'RECHAZADA_SIMULADA', updatedAt: 'x', audit });
+    const items = (sent[0] as TransactWriteCommand).input.TransactItems ?? [];
+    expect(items).toHaveLength(2);
+    expect(items.some((item) => item.Update?.TableName === 'Projects')).toBe(false);
+  });
+
+  it.each([
+    ['ya no está pendiente', ['ConditionalCheckFailed', 'None', 'None']],
+    ['conflicto con otra confirmación', ['TransactionConflict', 'None', 'None']],
+  ])('%s lanza INVALID_TRANSITION (409)', async (_caso, codes) => {
+    const { client } = fakeClient([canceled(codes)]);
+    const repo = createDynamoDonationRepository({ client, ...tables });
+    await expect(
+      repo.simulateDonation({ donation, outcome: 'CONFIRMADA_SIMULADA', updatedAt: 'x', audit }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
+  });
+});
+
 describe('idempotency helpers', () => {
   it('el hash no depende del orden de los campos ni de mayúsculas en el UUID', () => {
     expect(payloadHash({ projectId: PROJECT_ID.toUpperCase(), amountCents: 2500 })).toBe(
