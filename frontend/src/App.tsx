@@ -6,9 +6,32 @@ import { CatalogPage } from './pages/CatalogPage';
 import { CallbackPage } from './pages/CallbackPage';
 import { DetailPage } from './pages/DetailPage';
 import { DonatePage } from './pages/DonatePage';
+import { AuditPage } from './pages/AuditPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { ManagerPage } from './pages/ManagerPage';
 import { getErrorMessage } from './services/projects';
+
+type UserRole = 'DONANTE' | 'GESTOR' | 'AUDITOR';
+
+function getUserRole(user: User | null): UserRole | null {
+  const groups = user?.profile['cognito:groups'];
+  if (!Array.isArray(groups)) {
+    return null;
+  }
+  return groups.find((group): group is UserRole => group === 'DONANTE' || group === 'GESTOR' || group === 'AUDITOR') ?? null;
+}
+
+function getDisplayName(user: User): string {
+  const email = user.profile.email;
+  const username = user.profile.preferred_username;
+  if (typeof email === 'string' && email.length > 0) {
+    return email;
+  }
+  if (typeof username === 'string' && username.length > 0) {
+    return username;
+  }
+  return 'Usuario';
+}
 
 function ApplicationRoutes() {
   const { pathname } = useLocation();
@@ -65,6 +88,24 @@ function ApplicationRoutes() {
     }
   }
 
+  const role = getUserRole(user);
+  const navItems = [
+    { label: 'Catálogo', to: '/', active: pathname === '/' || pathname.startsWith('/proyecto/') },
+    ...(role === 'DONANTE'
+      ? [
+          { label: 'Donar', to: '/donar', active: pathname === '/donar' },
+          { label: 'Mi historial', to: '/historial', active: pathname === '/historial' },
+        ]
+      : []),
+    ...(role === 'GESTOR' ? [{ label: 'Gestor', to: '/gestor', active: pathname === '/gestor' }] : []),
+    ...(role === 'AUDITOR'
+      ? [
+          { label: 'Mi historial', to: '/historial', active: pathname === '/historial' },
+          { label: 'Auditoría', to: '/auditoria', active: pathname === '/auditoria' },
+        ]
+      : []),
+  ];
+
   return (
     <>
       <header className="border-b border-slate-200 bg-white">
@@ -72,13 +113,13 @@ function ApplicationRoutes() {
           <Link className="text-lg font-bold tracking-tight text-emerald-800" to="/">
             AQP-SOLIDARIA
           </Link>
+          {user && (
+            <p className="text-sm text-slate-700" aria-label="Sesión activa">
+              {getDisplayName(user)} ({role ?? 'SIN ROL'})
+            </p>
+          )}
           <nav aria-label="Navegación principal" className="flex flex-wrap items-center gap-4 text-sm">
-            {[
-              { label: 'Catálogo', to: '/', active: pathname === '/' || pathname.startsWith('/proyecto/') },
-              { label: 'Donar', to: '/donar', active: pathname === '/donar' },
-              { label: 'Mi historial', to: '/historial', active: pathname === '/historial' },
-              { label: 'Gestor', to: '/gestor', active: pathname === '/gestor' },
-            ].map(({ label, to, active }) => (
+            {navItems.map(({ label, to, active }) => (
               <Link
                 aria-current={active ? 'page' : undefined}
                 className={`border-b-2 py-1 hover:text-emerald-800 ${
@@ -124,9 +165,10 @@ function ApplicationRoutes() {
           <Route element={<CatalogPage onLogin={() => void handleLogin()} />} path="/" />
           <Route element={<DetailPage onLogin={() => void handleLogin()} />} path="/proyecto/:id" />
           <Route element={<CallbackPage />} path="/callback" />
-          <Route element={<DonatePage />} path="/donar" />
-          <Route element={<HistoryPage />} path="/historial" />
-          <Route element={<ManagerPage />} path="/gestor" />
+          <Route element={<DonatePage onLogin={() => void handleLogin()} />} path="/donar" />
+          <Route element={<HistoryPage onLogin={() => void handleLogin()} />} path="/historial" />
+          <Route element={<ManagerPage onLogin={() => void handleLogin()} />} path="/gestor" />
+          <Route element={<AuditPage onLogin={() => void handleLogin()} />} path="/auditoria" />
         </Routes>
       </main>
     </>
