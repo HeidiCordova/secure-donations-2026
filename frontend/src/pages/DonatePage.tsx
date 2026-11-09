@@ -114,7 +114,7 @@ export function DonatePage({ onLogin }: DonationPageProps) {
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Realizar una donación</h1>
         <p className="mt-2 text-sm text-slate-600">Elige un proyecto y aporta entre S/ 1 y S/ 1,000.</p>
         <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-          Simulación académica: no se realizará ningún cobro.
+          Simulación académica: no se ha realizado ningún cobro.
         </p>
       </header>
 
@@ -130,7 +130,24 @@ export function DonatePage({ onLogin }: DonationPageProps) {
           status={getErrorStatus(projectsError)}
         />
       )}
-      {!projectsError && projects === null && <p role="status">Cargando proyectos…</p>}
+      {!projectsError && projects === null && (
+        <div
+          aria-label="Cargando formulario de donación"
+          className="animate-pulse space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+          role="status"
+        >
+          <div className="h-5 w-1/3 rounded bg-slate-200" />
+          <div className="space-y-2">
+            <div className="h-4 w-24 rounded bg-slate-200" />
+            <div className="h-11 rounded-lg bg-slate-200" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-4 w-20 rounded bg-slate-200" />
+            <div className="h-11 rounded-lg bg-slate-200" />
+          </div>
+          <div className="h-11 rounded-lg bg-slate-300" />
+        </div>
+      )}
       {!projectsError && projects?.length === 0 && (
         <ErrorMessage
           actionLabel="Actualizar catálogo"

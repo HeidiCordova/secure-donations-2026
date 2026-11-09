@@ -91,55 +91,69 @@ export function ManagerPage({ onLogin }: ManagerPageProps) {
         />
       )}
 
-      <form
-        className="mb-10 max-w-2xl space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
-        onSubmit={(event) => void createProject(event)}
-      >
-        <h2 className="text-xl font-semibold text-slate-900">Crear proyecto</h2>
-        <label className="block text-sm font-semibold text-slate-800">
-          Título
-          <input
-            className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
-            maxLength={120}
-            minLength={3}
-            onChange={(event) => setTitle(event.target.value)}
-            required
-            value={title}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-slate-800">
-          Descripción
-          <textarea
-            className="mt-2 min-h-32 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal"
-            maxLength={2000}
-            minLength={10}
-            onChange={(event) => setDescription(event.target.value)}
-            required
-            value={description}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-slate-800">
-          Meta (S/)
-          <input
-            className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
-            inputMode="decimal"
-            min="0.01"
-            onChange={(event) => setGoal(event.target.value)}
-            placeholder="5000.00"
-            required
-            step="0.01"
-            type="number"
-            value={goal}
-          />
-        </label>
-        <button
-          className="min-h-11 rounded-lg bg-emerald-700 px-5 py-2 font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
-          disabled={pending || goalCents === undefined}
-          type="submit"
+      {pending ? (
+        <div
+          aria-label="Creando borrador"
+          className="mb-10 max-w-2xl animate-pulse space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+          role="status"
         >
-          {pending ? 'Creando…' : 'Crear borrador'}
-        </button>
-      </form>
+          <div className="h-6 w-1/3 rounded bg-slate-200" />
+          <div className="h-11 rounded-lg bg-slate-200" />
+          <div className="h-32 rounded-lg bg-slate-200" />
+          <div className="h-11 rounded-lg bg-slate-200" />
+          <div className="h-11 w-40 rounded-lg bg-slate-300" />
+        </div>
+      ) : (
+        <form
+          className="mb-10 max-w-2xl space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+          onSubmit={(event) => void createProject(event)}
+        >
+          <h2 className="text-xl font-semibold text-slate-900">Crear proyecto</h2>
+          <label className="block text-sm font-semibold text-slate-800">
+            Título
+            <input
+              className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
+              maxLength={120}
+              minLength={3}
+              onChange={(event) => setTitle(event.target.value)}
+              required
+              value={title}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-slate-800">
+            Descripción
+            <textarea
+              className="mt-2 min-h-32 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal"
+              maxLength={2000}
+              minLength={10}
+              onChange={(event) => setDescription(event.target.value)}
+              required
+              value={description}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-slate-800">
+            Meta (S/)
+            <input
+              className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
+              inputMode="decimal"
+              min="0.01"
+              onChange={(event) => setGoal(event.target.value)}
+              placeholder="5000.00"
+              required
+              step="0.01"
+              type="number"
+              value={goal}
+            />
+          </label>
+          <button
+            className="min-h-11 rounded-lg bg-emerald-700 px-5 py-2 font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
+            disabled={goalCents === undefined}
+            type="submit"
+          >
+            Crear borrador
+          </button>
+        </form>
+      )}
 
       <section>
         <h2 className="mb-4 text-xl font-semibold text-slate-900">Borradores creados en esta sesión</h2>
@@ -147,21 +161,36 @@ export function ManagerPage({ onLogin }: ManagerPageProps) {
           <p className="text-sm text-slate-600">Los nuevos borradores aparecerán aquí para que puedas publicarlos.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {drafts.map((project) => (
-              <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" key={project.projectId}>
-                <h3 className="text-lg font-semibold text-slate-900">{project.title}</h3>
-                <p className="mt-2 whitespace-pre-line text-sm text-slate-600">{project.description}</p>
-                <p className="mt-3 text-sm text-slate-700">Meta: {formatPEN(project.goalAmountCents)}</p>
-                <button
-                  className="mt-4 min-h-11 rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
-                  disabled={publishingId !== null}
-                  onClick={() => void publishProject(project.projectId)}
-                  type="button"
+            {drafts.map((project) =>
+              publishingId === project.projectId ? (
+                <article
+                  aria-label="Publicando borrador"
+                  className="animate-pulse rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+                  key={project.projectId}
+                  role="status"
                 >
-                  {publishingId === project.projectId ? 'Publicando…' : 'Publicar'}
-                </button>
-              </article>
-            ))}
+                  <div className="h-6 w-2/3 rounded bg-slate-200" />
+                  <div className="mt-4 h-4 rounded bg-slate-200" />
+                  <div className="mt-2 h-4 w-3/4 rounded bg-slate-200" />
+                  <div className="mt-4 h-4 w-1/3 rounded bg-slate-200" />
+                  <div className="mt-4 h-11 w-28 rounded-lg bg-slate-300" />
+                </article>
+              ) : (
+                <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" key={project.projectId}>
+                  <h3 className="text-lg font-semibold text-slate-900">{project.title}</h3>
+                  <p className="mt-2 whitespace-pre-line text-sm text-slate-600">{project.description}</p>
+                  <p className="mt-3 text-sm text-slate-700">Meta: {formatPEN(project.goalAmountCents)}</p>
+                  <button
+                    className="mt-4 min-h-11 rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
+                    disabled={publishingId !== null}
+                    onClick={() => void publishProject(project.projectId)}
+                    type="button"
+                  >
+                    Publicar
+                  </button>
+                </article>
+              ),
+            )}
           </div>
         )}
       </section>

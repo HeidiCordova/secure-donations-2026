@@ -93,7 +93,28 @@ export function HistoryPage({ onLogin }: HistoryPageProps) {
           status={getErrorStatus(donationsError)}
         />
       )}
-      {!donationsError && donations === null && <p role="status">Cargando historial…</p>}
+      {!donationsError && donations === null && (
+        <div
+          aria-label="Cargando historial de donaciones"
+          className="animate-pulse overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+          role="status"
+        >
+          <div className="hidden grid-cols-5 gap-4 bg-slate-50 p-5 sm:grid">
+            {[0, 1, 2, 3, 4].map((cell) => (
+              <div className="h-4 rounded bg-slate-200" key={cell} />
+            ))}
+          </div>
+          <div className="divide-y divide-slate-100">
+            {[0, 1, 2].map((row) => (
+              <div className="grid gap-3 p-5 sm:grid-cols-5 sm:gap-4" key={row}>
+                {[0, 1, 2, 3, 4].map((cell) => (
+                  <div className={`h-4 rounded bg-slate-200 ${cell === 1 ? 'w-3/4' : 'w-full'}`} key={cell} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {projectsError !== null && (
         <ErrorMessage
           description={getErrorMessage(projectsError)}

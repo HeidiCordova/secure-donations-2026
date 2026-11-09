@@ -13,14 +13,16 @@ import { getErrorMessage } from './services/projects';
 
 type UserRole = 'DONANTE' | 'GESTOR' | 'AUDITOR';
 
-function getUserRole(user: User | null): UserRole | null {
-  const groups = user?.profile['cognito:groups'];
-  if (!Array.isArray(groups)) {
-    return null;
+function getUserRoles(user: User | null): Set<UserRole> {
+  const groups = user?.profile['cognito:groups'] ?? user?.profile.groups;
+  const values = Array.isArray(groups) ? groups : typeof groups === 'string' ? groups.split(/[,\s]+/) : [];
+  const roles = new Set<UserRole>();
+  for (const value of values) {
+    if (value === 'DONANTE' || value === 'GESTOR' || value === 'AUDITOR') {
+      roles.add(value);
+    }
   }
-  return (
-    groups.find((group): group is UserRole => group === 'DONANTE' || group === 'GESTOR' || group === 'AUDITOR') ?? null
-  );
+  return roles;
 }
 
 function getDisplayName(user: User): string {
@@ -90,19 +92,24 @@ function ApplicationRoutes() {
     }
   }
 
-  const role = getUserRole(user);
+  const roles = getUserRoles(user);
+  const roleLabel = roles.size > 0 ? [...roles].join(', ') : 'SIN ROL';
   const navItems = [
     { label: 'Catálogo', to: '/', active: pathname === '/' || pathname.startsWith('/proyecto/') },
-    ...(role === 'DONANTE'
+    ...(roles.has('DONANTE')
       ? [
           { label: 'Donar', to: '/donar', active: pathname === '/donar' },
           { label: 'Mi historial', to: '/historial', active: pathname === '/historial' },
         ]
       : []),
-    ...(role === 'GESTOR' ? [{ label: 'Gestor', to: '/gestor', active: pathname === '/gestor' }] : []),
-    ...(role === 'AUDITOR'
+    ...(user && (roles.has('GESTOR') || roles.size === 0)
+      ? [{ label: 'Gestor', to: '/gestor', active: pathname === '/gestor' }]
+      : []),
+    ...(roles.has('AUDITOR')
       ? [
-          { label: 'Mi historial', to: '/historial', active: pathname === '/historial' },
+          ...(!roles.has('DONANTE')
+            ? [{ label: 'Mi historial', to: '/historial', active: pathname === '/historial' }]
+            : []),
           { label: 'Auditoría', to: '/auditoria', active: pathname === '/auditoria' },
         ]
       : []),
@@ -117,7 +124,7 @@ function ApplicationRoutes() {
           </Link>
           {user && (
             <p className="text-sm text-slate-700" aria-label="Sesión activa">
-              {getDisplayName(user)} ({role ?? 'SIN ROL'})
+              {getDisplayName(user)} ({roleLabel})
             </p>
           )}
           <nav aria-label="Navegación principal" className="flex flex-wrap items-center gap-4 text-sm">
