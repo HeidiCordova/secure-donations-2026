@@ -2,16 +2,18 @@ import { useEffect, useState } from 'react';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { getAuthenticatedJson, getErrorMessage, getErrorStatus } from '../services/projects';
 
-type AuditAction = 'PROJECT_CREATE' | 'PROJECT_PUBLISH' | 'DONATION_CREATE' | 'DONATION_SIMULATE';
+type AuditEventType =
+  'PROJECT_CREATE' | 'PROJECT_PUBLISH' | 'DONATION_CREATE' | 'DONATION_SIMULATE' | 'DONATION_FLAGGED';
+type AuditFilter = AuditEventType | 'ALL';
 
 interface AuditEvent {
   eventId: string;
   timestamp: string;
   requestId: string;
   actorRef: string;
-  action: AuditAction;
+  action: AuditEventType;
   resourceRef: string;
-  outcome: string;
+  outcome: 'SUCCESS' | 'DENIED' | 'INVALID' | 'NOT_FOUND' | 'CONFLICT' | 'ERROR';
 }
 
 interface AuditResponse {
@@ -23,26 +25,56 @@ interface AuditPageProps {
   onLogin: () => void;
 }
 
-const actions: AuditAction[] = ['PROJECT_CREATE', 'PROJECT_PUBLISH', 'DONATION_CREATE', 'DONATION_SIMULATE'];
+const eventTypes: AuditEventType[] = [
+  'PROJECT_CREATE',
+  'PROJECT_PUBLISH',
+  'DONATION_CREATE',
+  'DONATION_SIMULATE',
+  'DONATION_FLAGGED',
+];
+
+function outcomeClassName(outcome: AuditEvent['outcome']): string {
+  switch (outcome) {
+    case 'SUCCESS':
+      return 'bg-emerald-100 text-emerald-800';
+    case 'DENIED':
+    case 'INVALID':
+      return 'bg-amber-100 text-amber-900';
+    case 'NOT_FOUND':
+      return 'bg-slate-100 text-slate-700';
+    case 'CONFLICT':
+    case 'ERROR':
+      return 'bg-red-100 text-red-800';
+  }
+}
 
 export function AuditPage({ onLogin }: AuditPageProps) {
-  const [action, setAction] = useState<AuditAction>('PROJECT_CREATE');
+  const [eventType, setEventType] = useState<AuditFilter>('ALL');
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    const query = new URLSearchParams({ type: action, limit: '50' });
-    void getAuthenticatedJson<AuditResponse>(`/v1/audit?${query}`, controller.signal)
-      .then(({ items }) => setEvents(items))
-      .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(requestError);
-        }
-      });
+    const fetchEvents = (type: AuditEventType) => {
+      const query = new URLSearchParams({ type, limit: '50' });
+      return getAuthenticatedJson<AuditResponse>(`/v1/audit?${query}`, controller.signal);
+    };
+    const request =
+      eventType === 'ALL'
+        ? Promise.all(eventTypes.map(fetchEvents)).then((responses) =>
+            responses
+              .flatMap(({ items }) => items)
+              .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)),
+          )
+        : fetchEvents(eventType).then(({ items }) => items);
+    void request.then(setEvents).catch((requestError: unknown) => {
+      if (!controller.signal.aborted) {
+        setError(requestError);
+      }
+    });
     return () => controller.abort();
-  }, [action, retryCount]);
+  }, [eventType, retryCount]);
 
   return (
     <section>
@@ -54,17 +86,19 @@ export function AuditPage({ onLogin }: AuditPageProps) {
       <label className="mb-6 block max-w-md text-sm font-semibold text-slate-800">
         Tipo de evento
         <select
+          aria-label="Tipo de evento"
           className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 font-normal"
           onChange={(event) => {
             setEvents(null);
             setError(null);
-            setAction(event.target.value as AuditAction);
+            setEventType(event.target.value as AuditFilter);
           }}
-          value={action}
+          value={eventType}
         >
-          {actions.map((eventAction) => (
-            <option key={eventAction} value={eventAction}>
-              {eventAction}
+          <option value="ALL">TODOS</option>
+          {eventTypes.map((type) => (
+            <option key={type} value={type}>
+              {type}
             </option>
           ))}
         </select>
@@ -102,9 +136,23 @@ export function AuditPage({ onLogin }: AuditPageProps) {
               {events.map((event) => (
                 <tr key={event.eventId}>
                   <td className="px-5 py-4">{new Date(event.timestamp).toLocaleString('es-PE')}</td>
-                  <td className="px-5 py-4">{event.action}</td>
+                  <td className="px-5 py-4">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        event.action === 'DONATION_FLAGGED' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {event.action}
+                    </span>
+                  </td>
                   <td className="px-5 py-4 break-all">{event.resourceRef}</td>
-                  <td className="px-5 py-4">{event.outcome}</td>
+                  <td className="px-5 py-4">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${outcomeClassName(event.outcome)}`}
+                    >
+                      {event.outcome}
+                    </span>
+                  </td>
                   <td className="px-5 py-4">{event.actorRef}</td>
                 </tr>
               ))}

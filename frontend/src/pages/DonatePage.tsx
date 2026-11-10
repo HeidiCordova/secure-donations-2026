@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { ErrorMessage } from '../components/ErrorMessage';
 import {
   formatPEN,
@@ -24,6 +25,17 @@ interface DonationAttempt {
   amountCents: number;
 }
 
+function donationStatusLabel(status: Donation['status']): string {
+  switch (status) {
+    case 'PENDIENTE_SIMULACION':
+      return 'PENDING';
+    case 'CONFIRMADA_SIMULADA':
+      return 'CONFIRMED';
+    case 'RECHAZADA_SIMULADA':
+      return 'REJECTED';
+  }
+}
+
 function toCents(amount: string): number | undefined {
   const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(amount);
   if (!match) {
@@ -43,6 +55,7 @@ export function DonatePage({ onLogin }: DonationPageProps) {
   const [requestError, setRequestError] = useState<unknown>(null);
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const activeAttempt = useRef<DonationAttempt | null>(null);
 
   useEffect(() => {
@@ -61,6 +74,7 @@ export function DonatePage({ onLogin }: DonationPageProps) {
     setPending(true);
     setRequestError(null);
     setDonation(null);
+    setCopyStatus('idle');
     try {
       const created = await postAuthenticatedJson<Donation>(
         '/v1/donations',
@@ -103,6 +117,18 @@ export function DonatePage({ onLogin }: DonationPageProps) {
       setRequestError(error);
     } finally {
       setConfirming(false);
+    }
+  }
+
+  async function copyDonationId() {
+    if (!donation) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(donation.donationId);
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('error');
     }
   }
 
@@ -209,13 +235,60 @@ export function DonatePage({ onLogin }: DonationPageProps) {
           )}
 
           {donation ? (
-            <div className="space-y-3 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-950" role="status">
-              <p>
-                Donación {donation.donationId}: {formatPEN(donation.amountCents)} — {donation.status}
-              </p>
+            <section
+              aria-live="polite"
+              className="space-y-5 rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950"
+              role="status"
+            >
+              <header>
+                <h2 className="text-xl font-bold">Comprobante de donación</h2>
+                <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                  ¡Donación procesada!
+                </p>
+              </header>
+              <div className="rounded-lg border border-emerald-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ID de Donación</p>
+                <p className="mt-1 break-all font-mono text-lg font-bold text-slate-900">{donation.donationId}</p>
+              </div>
+              <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-emerald-800">Monto</dt>
+                  <dd className="mt-1 text-lg font-bold">{formatPEN(donation.amountCents)}</dd>
+                </div>
+                <div>
+                  <dt className="text-emerald-800">Fecha</dt>
+                  <dd className="mt-1 font-medium">{new Date(donation.createdAt).toLocaleString('es-PE')}</dd>
+                </div>
+                <div>
+                  <dt className="text-emerald-800">Estado</dt>
+                  <dd className="mt-1">
+                    <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-900">
+                      {donationStatusLabel(donation.status)}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+              <div className="flex flex-wrap items-center gap-4">
+                <button
+                  className="min-h-11 rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800"
+                  onClick={() => void copyDonationId()}
+                  type="button"
+                >
+                  Copiar ID de Donación
+                </button>
+                <Link className="font-semibold text-emerald-800 underline" to="/historial">
+                  Ver en Mi Historial
+                </Link>
+              </div>
+              {copyStatus === 'copied' && <p className="text-sm font-medium">ID copiado al portapapeles.</p>}
+              {copyStatus === 'error' && (
+                <p className="text-sm font-medium text-red-800" role="alert">
+                  No se pudo copiar el ID. Puedes seleccionarlo y copiarlo manualmente.
+                </p>
+              )}
               {donation.status === 'PENDIENTE_SIMULACION' && (
                 <button
-                  className="min-h-11 rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
+                  className="min-h-11 rounded-lg border border-emerald-700 px-4 py-2 font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-60"
                   disabled={confirming}
                   onClick={() => void simulateConfirmation()}
                   type="button"
@@ -229,12 +302,13 @@ export function DonatePage({ onLogin }: DonationPageProps) {
                   setDonation(null);
                   setRequestError(null);
                   setAmount('');
+                  setCopyStatus('idle');
                 }}
                 type="button"
               >
                 Iniciar una nueva donación
               </button>
-            </div>
+            </section>
           ) : (
             <button
               className="min-h-11 w-full rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
