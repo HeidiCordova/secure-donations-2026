@@ -2,8 +2,8 @@
 
 **Proyecto:** Secure Donations 2026 (AQP-SOLIDARIA)  
 **Autores:** Barbara Carrillo - Heidi Cordova - Maria Ezcurra - Rodrigo Veliz  
-**Entorno:** AWS Academic (`academic`)  
-**Fecha:** 8 Noviembre 2026
+**Entorno:** AWS (Free plan), stage academic, us-east-2.
+**Fecha:** 11 Noviembre 2026
 
 ---
 
@@ -52,25 +52,25 @@ En términos prácticos, la validación no se realiza solo en la interfaz; la au
 
 A continuación se presenta la matriz de ejecución consolidada para las pruebas T01–T14. La evidencia se obtuvo sobre el entorno `academic` y se valida contra la lógica del backend y la documentación del proyecto.
 
-| ID | Nombre de la Prueba | Código Obtenido | Resultado | Observación de Validación Zero Trust |
-| :-- | :------------------ | :-------------: | :--------: | :---------------------------------- |
-| **T01** | Catálogo público | `200 OK` | PASSED | Endpoint público sin restricción de token. |
-| **T02** | Sin token consulta historial | `401 Unauthorized` | PASSED | PEP rechaza consulta privada sin token. |
-| **T03** | Donante no crea proyectos | `403 Forbidden` | PASSED | PE valida el rol del token e impide la creación. |
-| **T04** | Monto cero | `400 Bad Request` | PASSED | Validación de regla de negocio en backend. |
-| **T04** | Monto decimal | `400 Bad Request` | PASSED | Estructura de datos inválida rechazada. |
-| **T04** | Monto máximo excedido | `400 Bad Request` | PASSED | Límite superior de donación protegido. |
-| **T05** | Crear intención de donación | `201 Created` | PASSED | Creación válida y pendiente de cobro. |
-| **T06** | Repetir clave y carga idénticas | `201 Created` | PASSED | Idempotencia: devuelve la donación existente. |
-| **T07** | Reutilizar clave con carga distinta | `409 Conflict` | PASSED | Idempotencia: detecta conflicto en el payload. |
-| **T08** | 10 confirmaciones concurrentes | `200/201` con un solo incremento | PASSED | Se garantiza consistencia bajo concurrencia. |
-| **T09** | Consultar donación ajena | `401/403/404` | OBSERVACIÓN | El backend bloquea el acceso cruzado; el resultado exacto depende de la capa de autorización y la política de error. |
-| **T10** | IAM mínimo en Lambda | `AccessDenied` / error controlado | PASSED | Se confirma el principio de mínimo privilegio y la ausencia de permisos de escritura innecesarios. |
-| **T11** | ID token sin scopes | `403 Forbidden` | OBSERVACIÓN | Se rechaza el uso de un ID token sin permisos de recurso. |
-| **T11** | JWT alterado | `401 Unauthorized` | PASSED | Firma criptográfica inválida rechazada. |
-| **T12** | Gestor no consulta historial donante | `403/404` | OBSERVACIÓN | Se bloquea el aislamiento entre roles y la divulgación de historial ajeno. |
-| **T13** | Token revocado usado antes de expirar | Válido hasta expiración / limitación documentada | OBSERVACIÓN | Riesgo residual del caché local del authorizer; se documenta como limitación operativa. |
-| **T14** | Usuario GESTOR sin MFA | Denegado | PASSED | El segundo factor es obligatorio para roles privilegiados. |
+| ID      | Nombre de la Prueba                   |                 Código Obtenido                  |  Resultado  | Observación de Validación Zero Trust                                                                                 |
+| :------ | :------------------------------------ | :----------------------------------------------: | :---------: | :------------------------------------------------------------------------------------------------------------------- |
+| **T01** | Catálogo público                      |                     `200 OK`                     |   PASSED    | Endpoint público sin restricción de token.                                                                           |
+| **T02** | Sin token consulta historial          |                `401 Unauthorized`                |   PASSED    | PEP rechaza consulta privada sin token.                                                                              |
+| **T03** | Donante no crea proyectos             |                 `403 Forbidden`                  |   PASSED    | PE valida el rol del token e impide la creación.                                                                     |
+| **T04** | Monto cero                            |                `400 Bad Request`                 |   PASSED    | Validación de regla de negocio en backend.                                                                           |
+| **T04** | Monto decimal                         |                `400 Bad Request`                 |   PASSED    | Estructura de datos inválida rechazada.                                                                              |
+| **T04** | Monto máximo excedido                 |                `400 Bad Request`                 |   PASSED    | Límite superior de donación protegido.                                                                               |
+| **T05** | Crear intención de donación           |                  `201 Created`                   |   PASSED    | Creación válida y pendiente de cobro.                                                                                |
+| **T06** | Repetir clave y carga idénticas       |                  `201 Created`                   |   PASSED    | Idempotencia: devuelve la donación existente.                                                                        |
+| **T07** | Reutilizar clave con carga distinta   |                  `409 Conflict`                  |   PASSED    | Idempotencia: detecta conflicto en el payload.                                                                       |
+| **T08** | 10 confirmaciones concurrentes        |         `200/201` con un solo incremento         |   PASSED    | Se garantiza consistencia bajo concurrencia.                                                                         |
+| **T09** | Consultar donación ajena              |                  `401/403/404`                   | OBSERVACIÓN | El backend bloquea el acceso cruzado; el resultado exacto depende de la capa de autorización y la política de error. |
+| **T10** | IAM mínimo en Lambda                  |        `AccessDenied` / error controlado         |   PASSED    | Se confirma el principio de mínimo privilegio y la ausencia de permisos de escritura innecesarios.                   |
+| **T11** | ID token sin scopes                   |                 `403 Forbidden`                  | OBSERVACIÓN | Se rechaza el uso de un ID token sin permisos de recurso.                                                            |
+| **T11** | JWT alterado                          |                `401 Unauthorized`                |   PASSED    | Firma criptográfica inválida rechazada.                                                                              |
+| **T12** | Gestor no consulta historial donante  |                    `403/404`                     | OBSERVACIÓN | Se bloquea el aislamiento entre roles y la divulgación de historial ajeno.                                           |
+| **T13** | Token revocado usado antes de expirar | Válido hasta expiración / limitación documentada | OBSERVACIÓN | Riesgo residual del caché local del authorizer; se documenta como limitación operativa.                              |
+| **T14** | Usuario GESTOR sin MFA                |                     Denegado                     |   PASSED    | El segundo factor es obligatorio para roles privilegiados.                                                           |
 
 > Observación importante: las pruebas de acceso no autorizado y acceso cruzado en la especificación del proyecto aceptan `401`, `403` o `404` como respuestas válidas, siempre que se muestre la denegación y no se revele información privada. Esto es coherente con el enfoque Zero Trust y con la estrategia de respuesta mínima.
 
