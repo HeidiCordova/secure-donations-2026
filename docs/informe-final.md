@@ -2,8 +2,8 @@
 
 **Proyecto:** Secure Donations 2026 (AQP-SOLIDARIA)  
 **Autores:** Barbara Carrillo - Heidi Cordova - Maria Ezcurra - Rodrigo Veliz  
-**Entorno:** AWS (Free plan), stage academic, us-east-2.
-**Fecha:** 11 Noviembre 2026
+**Entorno:** AWS Academic (`academic`)  
+**Fecha:** 8 Noviembre 2026
 
 ---
 
