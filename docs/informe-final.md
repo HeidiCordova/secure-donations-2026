@@ -1,113 +1,126 @@
-# Informe de Pruebas de Seguridad y Validación Zero Trust
+# Informe técnico — Secure Donations 2026
 
-**Proyecto:** Secure Donations 2026 (AQP-SOLIDARIA)  
-**Autores:** Barbara Carrillo - Heidi Cordova - Maria Ezcurra - Rodrigo Veliz  
-**Entorno:** AWS Academic (`academic`)  
-**Fecha:** 8 Noviembre 2026
+**Proyecto:** Secure Donations 2026 (AQP-SOLIDARIA)<br>
+**Curso:** Tópicos Avanzados en Ingeniería de Software — EPIS, UNSA<br>
+**Equipo:** Barbara Carrillo, Heidi Cordova, Maria Ezcurra y Rodrigo Veliz<br>
+**Entorno:** AWS (Free plan), stage `academic`, región `us-east-2`<br>
+**Fecha:** 11 de noviembre de 2026
 
----
+## 1. Objetivo y alcance
 
-## 1. Introducción
+Este informe presenta la arquitectura de seguridad y los resultados de las pruebas T01–T14 del prototipo académico AQP-SOLIDARIA. El objetivo es verificar que la autenticación, la autorización, la validación de negocio y el aislamiento de datos se apliquen en el backend en cada solicitud, no solo en la interfaz.
 
-El presente informe documenta las pruebas de seguridad y la arquitectura aplicada a la plataforma de donaciones ficticia **AQP-SOLIDARIA**. El objetivo principal es validar la implementación del modelo de seguridad **Zero Trust (Confianza Cero)**, asegurando que el control de acceso y las reglas de negocio no dependan únicamente de la capa de presentación, sino que se verifiquen de forma estricta e independiente en cada solicitud procesada por el backend.
+Las donaciones son intenciones y simulaciones: no se procesan pagos reales. Los resultados se basan en las evidencias del repositorio y en la ejecución del stage académico; no constituyen una certificación ni una evaluación independiente de cumplimiento.
 
-La evidencia recopilada confirma que la plataforma incorpora controles de autenticación, autorización, validación de negocio, anti-BOLA, idempotencia y auditoría en la capa de servicios, con el propósito de mitigar abuso de identidad, acceso cruzado, duplicación de transacciones y errores de integración.
+## 2. Arquitectura Zero Trust
 
----
+### 2.1 Componentes PE, PA y PEP
 
-## 2. Mapeo de Arquitectura Zero Trust (NIST SP 800-207)
+| Componente                         | Implementación                                                                    | Responsabilidad y límite                                                                                                                                                                                            |
+| ---------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PEP — Policy Enforcement Point** | API Gateway HTTP API con JWT authorizer y scopes por ruta                         | Verifica el token y aplica la decisión de acceso a la API antes de invocar Lambda. CloudFront entrega la SPA, pero no sustituye al PEP de la API.                                                                   |
+| **PE — Policy Engine**             | Módulo `authz` en AWS Lambda (MVP)                                                | Evalúa grupo, scopes, propietario y estado del recurso para autorizar cada operación. Amazon Verified Permissions/Cedar es una extensión planteada, no el PE desplegado en este MVP. |
+| **PA — Policy Administrator**      | Amazon Cognito, como componente del flujo de administración de identidad y sesión | Emite y administra el ciclo de los tokens y aplica MFA a los roles privilegiados. El prototipo no implementa un PA independiente que programe rutas de comunicación.                                                  |
 
-De acuerdo con la publicación especial **NIST SP 800-207**, la arquitectura de AQP-SOLIDARIA implementa los componentes centrales de Zero Trust de la siguiente manera:
+Las decisiones usan claims de Cognito, el estado del recurso en DynamoDB y el stage. Los roles IAM por función limitan las operaciones de cada Lambda sobre los recursos de AWS.
 
-- **PEP (Policy Enforcement Point):** **AWS API Gateway**
-  - Intercepta el 100% de las solicitudes HTTP entrantes.
-  - Valida la presencia de tokens Bearer antes de reenviar el tráfico a los servicios internos.
-  - Deniega accesos no autenticados en el perímetro (`401 Unauthorized`).
-- **PE (Policy Engine):** **Funciones AWS Lambda (Lógica de AuthZ)**
-  - Aplica decisiones de autorización e inspección de _claims_ del JWT.
-  - Evalúa si la identidad del usuario tiene los scopes necesarios (por ejemplo: `api/projects.write`, `api/donations.read`).
-  - Implementa verificaciones anti-BOLA y reglas de negocio para impedir accesos cruzados entre usuarios.
-- **PA (Policy Administrator):** **AWS Cognito**
-  - Emite y gestiona los tokens JWT (OAuth 2.0).
-  - Autentica identidades mediante credenciales de usuario y exige Doble Factor de Autenticación (MFA) para roles privilegiados (Gestor y Auditor).
+### 2.2 Mapeo a los siete principios de NIST SP 800-207
 
-En términos prácticos, la validación no se realiza solo en la interfaz; la autoridad final reside en el backend, donde cada operación sensible es verificada antes de ejecutarse.
+| Principio                                                                         | Aplicación en el prototipo                                                                                                                                                                          | Evidencia / estado                                                   |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **1. Todos los recursos de datos y servicios se consideran recursos protegidos.** | Endpoints, funciones Lambda y tablas DynamoDB tienen políticas de acceso definidas; los recursos privados no se consideran confiables por estar dentro de la cuenta. | `design.md` §3–4; T03, T09, T10 y T12.                                |
+| **2. Toda comunicación se protege independientemente de la ubicación de red.**    | HTTPS para CloudFront y API Gateway; la API valida tokens en el punto de entrada.                                                                                                                   | CA-NF01.1; configuración de CloudFront/API Gateway.                  |
+| **3. El acceso se concede por sesión y por recurso.**                             | Access tokens de vida corta, scopes por ruta y comprobación de ownership usando el `sub` del token.                                                                                 | T09, T11 y T13; T13 documenta la excepción hasta la expiración.      |
+| **4. El acceso se determina por política dinámica.**                              | La autorización se evalúa en cada solicitud con identidad, grupo, scopes, propietario, estado del recurso y stage.                                                                                  | T03 y T12; `backend/src/authz/`.                                     |
+| **5. Se monitorea la postura de seguridad de los activos.**                       | **Parcial:** hay CloudTrail, logs y revisión de dependencias, pero no evaluación de postura de dispositivo ni evaluación continua del riesgo de sesión.             | CA-NF07.2; limitación documentada en §5.                             |
+| **6. La autenticación y autorización son estrictas antes de permitir el acceso.** | JWT authorizer, scopes, RBAC/ownership en backend y MFA TOTP para GESTOR/AUDITOR.                                                                                                                   | T02, T03, T11, T12 y T14.                                            |
+| **7. Se recolecta información para mejorar la seguridad.**                        | Logs JSON, eventos de auditoría y CloudTrail permiten registrar y revisar actividad.                                                                                                                | CA-NF07.2; evidencia de auditoría en `evidence/T01-T03-projects.md`. |
 
----
+El mapeo refleja los controles implementados y sus límites; no implica que la arquitectura satisfaga íntegramente todos los objetivos de una ZTA de producción.
 
-## 3. Decisiones de Diseño y Mecanismos de Seguridad
+## 3. Controles de seguridad
 
-1. **Autenticación basada en OAuth 2.0:** Uso estricto de tokens de acceso validados mediante firmas criptográficas. Los JWT alterados o no autorizados son rechazados inmediatamente por la infraestructura.
-2. **Idempotencia y anti-replay:** Registro único de intenciones de donación mediante llaves de idempotencia (`Idempotency-Key`), evitando duplicación de transacciones ante múltiples envíos o reintentos en red.
-3. **Validación estricta de negocio:**
-   - Rechazo de montos cero, negativos, decimales o superiores al límite permitido.
-   - Restricción de permisos por rol: los usuarios con rol `DONANTE` no pueden crear proyectos ni consultar registros privativos.
-4. **Principio de mínimo privilegio IAM:** Cada función Lambda tiene permisos mínimos; por ejemplo, el listado público no puede escribir en DynamoDB.
-5. **Auditoría inmutable y trazabilidad:** Se registran eventos de autenticación, denegación y acciones de negocio para soportar investigación y cumplimiento.
-6. **MFA para roles sensibles:** Los usuarios de tipo `GESTOR` y `AUDITOR` deben completar un segundo factor TOTP para acceder a operaciones privilegiadas.
+- **Autenticación:** OAuth 2.0/OIDC con Cognito. API Gateway valida los access tokens; las rutas protegidas requieren scopes. Un token alterado se rechaza.
+- **Autorización:** roles y ownership se verifican en Lambda. La UI oculta acciones según el rol solo por usabilidad; no es un control de seguridad.
+- **Integridad de donaciones:** importes enteros en céntimos de PEN, límites y estado del proyecto validados en servidor.
+- **Idempotencia:** clave por donante y operación; el mismo payload obtiene el mismo resultado y una clave reutilizada con payload diferente produce conflicto.
+- **Concurrencia:** las transiciones de simulación y el incremento del acumulado usan operaciones transaccionales y condiciones para evitar doble contabilización.
+- **Mínimo privilegio:** roles IAM separados por función; la función de listado tiene Query sobre el índice requerido y no permisos de escritura.
+- **Auditoría:** logs estructurados y eventos de auditoría sin tokens ni cuerpos sensibles.
 
----
+## 4. Matriz de pruebas y resultados
 
-## 4. Matriz de Resultados y Evidencias (Ejecución en Bruno y validación del entorno AWS Academic)
+Los detalles de ejecución están en los documentos de [evidence/](../evidence/).
 
-A continuación se presenta la matriz de ejecución consolidada para las pruebas T01–T14. La evidencia se obtuvo sobre el entorno `academic` y se valida contra la lógica del backend y la documentación del proyecto.
+| ID      | Prueba                                                            | Resultado observado                                                           | Estado / evidencia                                                                                    |
+| ------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **T01** | Catálogo público sin token                                        | `200 OK`                                                                      | PASSED — `evidence/T01-T03-projects.md`                                                               |
+| **T02** | Consultar historial sin token                                     | `401 Unauthorized`                                                            | PASSED — `evidence/T02-evidencia.jpg`                                                                 |
+| **T03** | Donante intenta crear proyecto                                    | `403 Forbidden`                                                               | PASSED — `evidence/T01-T03-projects.md`                                                               |
+| **T04** | Monto no permitido (cero/mínimo, decimal o máximo excedido)       | `400 Bad Request`                                                             | PASSED — `evidence/T04-T12-donations.md`                                                              |
+| **T05** | Crear intención válida                                            | `201 Created`, `PENDIENTE_SIMULACION`, sin cargo                              | PASSED — `evidence/T04-T12-donations.md`; `donorSub` sanitizado                                       |
+| **T06** | Repetir clave y payload idénticos                                 | `201`; mismo `donationId`, una sola donación                                  | PASSED — `evidence/T04-T12-donations.md`                                                              |
+| **T07** | Repetir clave con payload distinto                                | `409 Conflict`                                                                | PASSED — `evidence/T04-T12-donations.md`                                                              |
+| **T08** | Diez confirmaciones concurrentes de la misma donación             | 1 respuesta `200`, 9 respuestas `409`; incremento único de 2500 céntimos        | PASSED — `evidence/T08-confirmaciones-concurrentes.md`                                                  |
+| **T09** | Donante consulta una donación ajena                               | `404 Not Found`; la respuesta no revela la donación                           | PASSED — `evidence/T09-donacion-ajena-404.jpg`                                                          |
+| **T10** | Lambda de listado intenta escribir en DynamoDB                    | Escrituras denegadas; Query solo en el índice autorizado                      | PASSED — `evidence/T10-iam-minimo.md`                                                                 |
+| **T11** | Usar ID token y JWT alterado en la API                            | ID token: `403 Forbidden` por falta de scopes; JWT alterado: `401 Unauthorized` | PASSED — `evidence/T02-T11-HU10-logs.md`, `docs/PLAN_PRUEBAS.md`                                        |
+| **T12** | Gestor consulta historial de donaciones                           | `403 Forbidden`                                                               | PASSED — `evidence/T04-T12-donations.md`                                                              |
+| **T13** | Usar access token tras revocar la sesión y antes de su expiración | `200 OK` hasta expirar                                                        | PASSED; limitación documentada — `evidence/T13-token-revocado.md`                                     |
+| **T14** | GESTOR sin segundo factor válido                                  | No se emiten tokens; MFA TOTP requerido                                       | PASSED — `evidence/T14-mfa.md`                                                                        |
 
-| ID      | Nombre de la Prueba                   |                 Código Obtenido                  |  Resultado  | Observación de Validación Zero Trust                                                                                 |
-| :------ | :------------------------------------ | :----------------------------------------------: | :---------: | :------------------------------------------------------------------------------------------------------------------- |
-| **T01** | Catálogo público                      |                     `200 OK`                     |   PASSED    | Endpoint público sin restricción de token.                                                                           |
-| **T02** | Sin token consulta historial          |                `401 Unauthorized`                |   PASSED    | PEP rechaza consulta privada sin token.                                                                              |
-| **T03** | Donante no crea proyectos             |                 `403 Forbidden`                  |   PASSED    | PE valida el rol del token e impide la creación.                                                                     |
-| **T04** | Monto cero                            |                `400 Bad Request`                 |   PASSED    | Validación de regla de negocio en backend.                                                                           |
-| **T04** | Monto decimal                         |                `400 Bad Request`                 |   PASSED    | Estructura de datos inválida rechazada.                                                                              |
-| **T04** | Monto máximo excedido                 |                `400 Bad Request`                 |   PASSED    | Límite superior de donación protegido.                                                                               |
-| **T05** | Crear intención de donación           |                  `201 Created`                   |   PASSED    | Creación válida y pendiente de cobro.                                                                                |
-| **T06** | Repetir clave y carga idénticas       |                  `201 Created`                   |   PASSED    | Idempotencia: devuelve la donación existente.                                                                        |
-| **T07** | Reutilizar clave con carga distinta   |                  `409 Conflict`                  |   PASSED    | Idempotencia: detecta conflicto en el payload.                                                                       |
-| **T08** | 10 confirmaciones concurrentes        |         `200/201` con un solo incremento         |   PASSED    | Se garantiza consistencia bajo concurrencia.                                                                         |
-| **T09** | Consultar donación ajena              |                  `401/403/404`                   | OBSERVACIÓN | El backend bloquea el acceso cruzado; el resultado exacto depende de la capa de autorización y la política de error. |
-| **T10** | IAM mínimo en Lambda                  |        `AccessDenied` / error controlado         |   PASSED    | Se confirma el principio de mínimo privilegio y la ausencia de permisos de escritura innecesarios.                   |
-| **T11** | ID token sin scopes                   |                 `403 Forbidden`                  | OBSERVACIÓN | Se rechaza el uso de un ID token sin permisos de recurso.                                                            |
-| **T11** | JWT alterado                          |                `401 Unauthorized`                |   PASSED    | Firma criptográfica inválida rechazada.                                                                              |
-| **T12** | Gestor no consulta historial donante  |                    `403/404`                     | OBSERVACIÓN | Se bloquea el aislamiento entre roles y la divulgación de historial ajeno.                                           |
-| **T13** | Token revocado usado antes de expirar | Válido hasta expiración / limitación documentada | OBSERVACIÓN | Riesgo residual del caché local del authorizer; se documenta como limitación operativa.                              |
-| **T14** | Usuario GESTOR sin MFA                |                     Denegado                     |   PASSED    | El segundo factor es obligatorio para roles privilegiados.                                                           |
+## 5. Limitaciones conocidas
 
-> Observación importante: las pruebas de acceso no autorizado y acceso cruzado en la especificación del proyecto aceptan `401`, `403` o `404` como respuestas válidas, siempre que se muestre la denegación y no se revele información privada. Esto es coherente con el enfoque Zero Trust y con la estrategia de respuesta mínima.
+1. **Revocación de access tokens (T13):** el JWT authorizer valida el token localmente y no consulta a Cognito por cada solicitud. Un access token ya emitido puede seguir siendo válido hasta su expiración aunque se revoque la sesión; los refresh tokens sí quedan revocados. La mitigación aplicada es una vida de access token de 15 minutos. La evidencia T13 confirma el comportamiento.
+2. **Sin postura de dispositivo ni evaluación continua:** el prototipo no evalúa postura del dispositivo ni riesgo de sesión de forma continua. Estas capacidades quedan fuera del alcance y del plan académico usado.
+3. **HTTP API sin WAF:** AWS WAF no se asocia directamente a API Gateway HTTP API. Una necesidad de WAF requeriría proteger la API mediante CloudFront o evaluar REST API, con el costo y cambios correspondientes.
+4. **Cuenta AWS compartida:** el equipo utiliza una cuenta compartida. La nueva experiencia de AWS no permite usuarios IAM con acceso a consola y da acceso de administrador a todo miembro invitado. Por mínimo privilegio solo se invitó a quien lo necesitaba; el resto trabajó contra la URL del API. El aislamiento depende de MFA, CloudTrail y la disciplina operativa del equipo.
 
----
+### 5.1 Análisis STRIDE y seguridad en el ciclo de vida (Antes / Durante / Después)
 
-## 5. Evidencias de Seguridad y Arquitectura
+Como parte de la ingeniería defensiva del proyecto, se evaluaron las amenazas bajo el modelo **STRIDE** de Microsoft y se estructuraron controles preventivos, detectivos y correctivos distribuidos en las fases del ciclo de vida del software:
 
-La evidencia documental y funcional del proyecto confirma los siguientes hallazgos clave:
+| Categoría STRIDE | Amenaza Identificada | Mitigación Implementada | Fase de Control |
+| :--- | :--- | :--- | :--- |
+| **S**poofing (Suplantación) | Robo o reutilización de tokens de acceso para simular identidades ajenas. | Validación criptográfica de JWT por API Gateway, expiración a 15 minutos y rechazo de ID Tokens en rutas de API. | **Antes** (Diseño / Autenticación) |
+| **T**ampering (Manipulación) | Modificación maliciosa de montos, estados o payloads de donación. | Validación estricta en servidor (Lambda) de enteros en céntimos, hashes de idempotencia y rechazo de payloads inconsistentes. | **Durante** (Ejecución / Backend) |
+| **R**epudiation (Repudio) | Desconocimiento de transacciones o acciones administrativas realizadas. | Registro estructurado de trazas de auditoría (Audit Logs) y eventos centralizados en CloudTrail sin exposición de secretos. | **Después** (Auditoría / Monitoreo) |
+| **I**nformation Disclosure (Divulgación) | Acceso no autorizado a registros de donaciones de otros usuarios (BOLA). | Comprobación explícita de propiedad (`sub` del token vs. propietario en base de datos) devolviendo `404 Not Found`. | **Durante** (Autorización de Recursos) |
+| **D**enial of Service (Denegación) | Saturación o sobreescritura concurrente del acumulado de proyectos. | Control de concurrencia optimista en DynamoDB y claves de idempotencia únicas por donante. | **Durante** (Control de Concurrencia) |
+| **E**levation of Privilege (Elevación) | Un rol de Donante intentando ejecutar endpoints reservados para Gestores o Auditores. | Verificación estricta de scopes OAuth en el PEP (API Gateway) y RBAC validado en el Policy Engine (Lambda). | **Antes y Durante** (PEP / PA) |
 
-- La API pública de catálogo responde correctamente sin token.
-- Las rutas privadas exigen autenticación y se rechazan de forma consistente.
-- Los roles `DONANTE`, `GESTOR` y `AUDITOR` están aislados por lógica de autorización en backend.
-- Las donaciones tienen control de idempotencia para prevenir duplicaciones accidentales o maliciosas.
-- La validación de `amountCents` impide inconsistencias en el dominio de negocio.
-- Los accesos no autorizados se logran y se auditan, reforzando la trazabilidad operativa.
-- La política IAM mínima evita que las funciones de lectura ejecuten operaciones de escritura no autorizadas.
-- El uso de MFA para roles privilegiados reduce significativamente el riesgo de escalada de privilegios.
+- **Seguridad ANTES (Diseño y Configuración):** Establecimiento del modelo Zero Trust (NIST SP 800-207), configuración restrictiva de Cognito, definición de políticas IAM de mínimo privilegio y estructuración de pruebas de aceptación automatizadas en Bruno.
+- **Seguridad DURANTE (Ejecución e Integración):** Evaluación dinámica de políticas en cada petición mediante Lambda, control estricto de idempotencia, transacciones atómicas bajo concurrencia y validación continua mediante CI/CD con Prettier.
+- **Seguridad DESPUÉS (Auditoría y Revisión):** Análisis de trazas en CloudTrail, revisión cruzada de Pull Requests entre compañeros (Ales y Barbara), sanitización de evidencias sensibles y consolidación del informe final de cumplimiento.
 
----
+## 6. Prototipo académico y protección de datos
 
-## 6. Uso de Inteligencia Artificial
+AQP-SOLIDARIA es un **prototipo académico** con donaciones simuladas: no procesa pagos reales ni está autorizado para recaudar fondos. Las pruebas deben usar identidades y datos ficticios; las capturas se sanitizan antes de incorporarlas al repositorio.
 
-Durante el desarrollo del laboratorio se utilizaron herramientas de IA para:
+Este trabajo no constituye una evaluación de cumplimiento de la **Ley N.º 29733, Ley de Protección de Datos Personales**, su reglamento, PCI DSS ni otras obligaciones aplicables. Un despliegue real en Perú requeriría, antes de tratar datos personales o recaudar fondos, determinar las responsabilidades y bases legales, informar a los titulares, atender sus derechos, proteger los datos y obtener revisión legal y de seguridad especializada.
 
-- Generación y ajuste de colecciones de pruebas automatizadas en Bruno.
-- Asistencia en el diagnóstico de errores de políticas de ejecución en PowerShell y Git.
-- Formateo y estructuración del informe según estándares NIST SP 800-207.
-- Consolidación de la documentación de seguimiento y trazabilidad de evidencias.
+## 7. Declaración de uso de IA
 
-Las herramientas de IA se emplearon como apoyo de productividad y análisis, sin reemplazar la validación real del comportamiento del sistema en AWS ni la revisión crítica de la evidencia de seguridad.
+| Campo de `design.md` §10 | Declaración |
+| :--- | :--- |
+| **Herramienta/modelo**   | Claude (Anthropic) y Copilot SDK en VS Code. |
+| **Participantes**        | Todo el equipo (Barbara Carrillo, Heidi Cordova, Maria Ezcurra y Rodrigo Veliz), según `AI_USAGE.md`. |
+| **Tareas asistidas**     | Contrastar el borrador con `requirements.md` y `design.md`; corregir la matriz T01–T14, estructurar el análisis STRIDE y actualizar la documentación de evidencias. |
+| **Aportes IA**           | Redacción y edición de `docs/informe-final.md`, `docs/PLAN_PRUEBAS.md`, `evidence/README.md` y `evidence/T04-T12-donations.md`; cambios por presentar mediante PR. |
+| **Validación humana**    | Contraste de las afirmaciones con las guías y evidencias existentes; revisión y validación final por parte del equipo. |
+| **Limitaciones**         | La IA no ejecuta despliegues ni verifica directamente la cuenta AWS. No se le proporcionan credenciales o tokens y los resultados se limitan a las evidencias revisables del repositorio. |
 
----
+El equipo conserva la responsabilidad de revisar el contenido, validar los resultados y explicar las decisiones técnicas.
 
-## 7. Conclusiones
+## 8. Conclusiones
 
-- La plataforma **Secure Donations 2026** cumple satisfactoriamente los principios Zero Trust en el backend, garantizando que ninguna acción sensible sea ejecutada sin previa autenticación y autorización.
-- Los mecanismos de idempotencia, validación de negocio y aislamiento de roles evitan estados inconsistentes y accesos cruzados entre usuarios.
-- La arquitectura minimiza la superficie de ataque al exigir verificación continua, políticas de permisos estrictas y controles de MFA para actividades privilegiadas.
-- La evidencia disponible demuestra una postura sólida de seguridad operativa, aunque existen limitaciones documentadas, principalmente relacionadas con el manejo de tokens revocados en caché y con la respuesta exacta del sistema ante accesos no autorizados según el tipo de error y la política de normalización del backend.
-- En conjunto, la solución presenta un diseño robusto para un entorno académico y una base adecuada para extensiones más exigentes en producción.
+Las pruebas documentadas muestran que la API aplica autenticación, autorización por rol y propietario, validación de negocio, idempotencia y privilegio mínimo en los casos probados. T08 demuestra una sola transición efectiva bajo concurrencia, T09 corrobora el aislamiento estricto mediante respuesta `404` ante intentos BOLA, y T13 explicita la ventana de validez del access token revocado. La implementación se considera apropiada para el alcance académico descrito, con las limitaciones de §5 y sin atribuirse cumplimiento integral de Zero Trust o de normativa de producción.
+
+## 9. Referencias
+
+- NIST SP 800-207, _Zero Trust Architecture_: <https://csrc.nist.gov/pubs/sp/800/207/final>
+- NIST SP 800-207A, _A Zero Trust Architecture Model for Access Control in Cloud-Native Applications in Multi-Cloud Environments_: <https://csrc.nist.gov/pubs/sp/800/207/a/final>
+- CISA, _Zero Trust Maturity Model v2.0_: <https://www.cisa.gov/resources-tools/resources/zero-trust-maturity-model>
+- API Gateway HTTP API JWT authorizers: <https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-jwt-authorizer.html>
+- Amazon Cognito token revocation: <https://docs.aws.amazon.com/cognito/latest/developerguide/token-revocation.html>
+- Ley N.º 29733, Ley de Protección de Datos Personales, Perú.
