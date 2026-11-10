@@ -1,7 +1,7 @@
 # Evidencia T04–T07, T09 y T12 — módulo donations (stage academic)
 
 Fecha: 2026-11-08 · Región: us-east-2 · Ejecutado por: Heidi desde AWS CloudShell
-Datos sanitizados: host del API reemplazado; el texto enmascara `donorSub` y no muestra tokens ni emails. La captura T05 aún requiere ocultar el `donorSub` y no debe publicarse en su estado actual.
+Datos sanitizados: host del API reemplazado y `donorSub` enmascarado; no se muestran tokens ni emails.
 Usuarios: `donante1` y `donante2` (grupo DONANTE), `gestor1` (grupo GESTOR).
 
 ## T05 — intención de donación válida (HU-05)
@@ -53,15 +53,6 @@ donante1 GET /v1/donations/5752b34a-…  → 200
 donante2 GET /v1/donations/5752b34a-…  → 404
 donante2 GET /v1/donations/me          → {"items":[]}
 ```
-
-La captura válida de T09 debe corresponder a la solicitud con la variable `secondDonorAccessToken` resuelta y mostrar `404`. Una ejecución con la variable vacía que devuelve `401` no valida el control de ownership y no se usa como evidencia del resultado.
-
-## T11 — ID token sin scopes y JWT alterado (CA-03.2, CA-NF02.1)
-
-| Credencial usada como `Authorization` | Resultado observado |
-|---|---|
-| ID token con firma válida, sin los scopes de API | `403 Forbidden` |
-| Access token con firma alterada | `401 Unauthorized` |
 
 ## T12 — un GESTOR no accede a historiales de donación
 
