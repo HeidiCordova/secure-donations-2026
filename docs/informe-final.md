@@ -3,8 +3,8 @@
 **Proyecto:** Secure Donations 2026 (AQP-SOLIDARIA)<br>
 **Curso:** Tópicos Avanzados en Ingeniería de Software — EPIS, UNSA<br>
 **Equipo:** Barbara Carrillo, Heidi Cordova, Maria Ezcurra y Rodrigo Veliz<br>
-**Entorno:** AWS Academic, stage `academic`, región `us-east-2`<br>
-**Fecha:** 9 de noviembre de 2026
+**Entorno:** AWS (Free plan), stage `academic`, región `us-east-2`<br>
+**Fecha:** 11 de noviembre de 2026
 
 ## 1. Objetivo y alcance
 
