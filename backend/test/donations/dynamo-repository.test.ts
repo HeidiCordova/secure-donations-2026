@@ -125,6 +125,17 @@ describe('createDynamoDonationRepository', () => {
     expect(query.input.ExpressionAttributeValues).toEqual({ ':sub': 'ana-sub' });
   });
 
+  it('listByDonorSince filtra por donante y por createdAt >= since en el GSI', async () => {
+    const { client, sent } = fakeClient([{ Items: [donation] }]);
+    const repo = createDynamoDonationRepository({ client, ...tables });
+    const since = '2026-11-08T09:00:00.000Z';
+    expect(await repo.listByDonorSince('ana-sub', since)).toHaveLength(1);
+    const query = sent[0] as QueryCommand;
+    expect(query.input.IndexName).toBe(DONATIONS_DONOR_INDEX);
+    expect(query.input.KeyConditionExpression).toBe('donorSub = :sub AND createdAt >= :since');
+    expect(query.input.ExpressionAttributeValues).toEqual({ ':sub': 'ana-sub', ':since': since });
+  });
+
   it('las funciones de lectura no tienen acceso a las tablas de escritura', async () => {
     const { client } = fakeClient([]);
     const repo = createDynamoDonationRepository({ client, donationsTable: 'Donations' });

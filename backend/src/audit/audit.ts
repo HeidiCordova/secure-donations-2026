@@ -43,6 +43,7 @@ export function outcomeFromError(error: unknown): AuditOutcome {
   switch (error.code) {
     case 'UNAUTHENTICATED':
     case 'FORBIDDEN':
+    case 'RATE_LIMITED':
       return 'DENIED';
     case 'VALIDATION_ERROR':
       return 'INVALID';

@@ -101,6 +101,7 @@ describe('withLogging (CA-NF07.1)', () => {
     [403, 'DENIED'],
     [404, 'NOT_FOUND'],
     [409, 'CONFLICT'],
+    [429, 'DENIED'],
     [500, 'ERROR'],
   ])('%i → %s', (status, outcome) => {
     expect(outcomeFromStatus(status)).toBe(outcome);

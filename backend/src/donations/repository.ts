@@ -32,6 +32,8 @@ export interface DonationRepository {
   createDonation(write: CreateDonationWrite): Promise<CreateDonationResult>;
   /** Donaciones del donante, más recientes primero (GSI donorSub-createdAt). */
   listByDonor(donorSub: string): Promise<Donation[]>;
+  /** Donaciones del donante creadas desde `sinceIso` (inclusive), para los límites anti-fraude. */
+  listByDonorSince(donorSub: string, sinceIso: string): Promise<Donation[]>;
   getDonation(donationId: string): Promise<Donation | undefined>;
   /**
    * PENDIENTE_SIMULACION → estado terminal, en una sola transacción (CA-06.2, RNF-HU-04):

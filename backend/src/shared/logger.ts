@@ -34,7 +34,7 @@ interface LoggableEvent {
 export function outcomeFromStatus(statusCode: number): LogOutcome {
   if (statusCode < 400) return 'SUCCESS';
   if (statusCode === 400) return 'INVALID';
-  if (statusCode === 401 || statusCode === 403) return 'DENIED';
+  if (statusCode === 401 || statusCode === 403 || statusCode === 429) return 'DENIED';
   if (statusCode === 404) return 'NOT_FOUND';
   if (statusCode === 409) return 'CONFLICT';
   return 'ERROR';

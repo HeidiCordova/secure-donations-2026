@@ -57,6 +57,16 @@ function replay(record: IdempotencyRecord, hash: string): HttpResponse {
   };
 }
 
+/**
+ * Límites anti-fraude por donante en una ventana de 1 hora (montos en céntimos).
+ * Se evalúan sobre todas sus donaciones de la ventana, en cualquier estado.
+ */
+export const FRAUD_WINDOW_MS = 3_600_000;
+export const MAX_DONATIONS_PER_HOUR = 5;
+export const MAX_AMOUNT_CENTS_PER_HOUR = 200_000; // S/ 2 000
+export const LARGE_DONATION_CENTS = 90_000; // S/ 900
+export const LARGE_DONATIONS_TO_FLAG = 2;
+
 export function makeDonationHandlers(deps: DonationDeps) {
   const now = deps.now ?? (() => new Date());
   const newId = deps.newId ?? (() => randomUUID());
@@ -82,6 +92,29 @@ export function makeDonationHandlers(deps: DonationDeps) {
     } catch {
       process.stderr.write(
         `${JSON.stringify({ level: 'error', msg: 'audit_write_failed', action, requestId: event.requestContext.requestId })}\n`,
+      );
+    }
+  }
+
+  /**
+   * Evento DONATION_FLAGGED en el mismo audit log que usa recordFailure. La donación ya se creó:
+   * si el evento no se pudiera escribir, la respuesta no cambia y se deja constancia en el log técnico.
+   */
+  async function recordFlag(event: ApiEvent, actorSub: string, resourceRef: string) {
+    try {
+      await deps.audit.record(
+        buildAuditEvent({
+          requestId: event.requestContext.requestId,
+          actorSub,
+          action: 'DONATION_FLAGGED',
+          resourceRef,
+          outcome: 'SUCCESS',
+          now: now(),
+        }),
+      );
+    } catch {
+      process.stderr.write(
+        `${JSON.stringify({ level: 'error', msg: 'audit_write_failed', action: 'DONATION_FLAGGED', requestId: event.requestContext.requestId })}\n`,
       );
     }
   }
@@ -127,8 +160,21 @@ export function makeDonationHandlers(deps: DonationDeps) {
           throw new AppError('CONFLICT', 'El proyecto no acepta donaciones');
         }
 
-        // 3) Clave + donación + AuditEvent en una sola transacción condicionada (AD-05, CA-05.4).
+        // 3) Anti-fraude: va después del replay (un reintento con la misma clave nunca recibe 429)
+        //    y después de validar el proyecto. Cuenta las donaciones del donante en la última hora.
         const timestamp = now();
+        const since = new Date(timestamp.getTime() - FRAUD_WINDOW_MS).toISOString();
+        const recent = await deps.donations.listByDonorSince(principal.sub, since);
+        const totalCents = recent.reduce((sum, d) => sum + d.amountCents, 0) + body.amountCents;
+        const largeCount =
+          recent.filter((d) => d.amountCents >= LARGE_DONATION_CENTS).length +
+          (body.amountCents >= LARGE_DONATION_CENTS ? 1 : 0);
+        const flagged = largeCount >= LARGE_DONATIONS_TO_FLAG;
+        if (recent.length >= MAX_DONATIONS_PER_HOUR || totalCents > MAX_AMOUNT_CENTS_PER_HOUR) {
+          throw new AppError('RATE_LIMITED', 'Límite de donaciones por hora alcanzado');
+        }
+
+        // 4) Clave + donación + AuditEvent en una sola transacción condicionada (AD-05, CA-05.4).
         const donation: Donation = {
           donationId: newId(),
           projectId,
@@ -167,6 +213,10 @@ export function makeDonationHandlers(deps: DonationDeps) {
             throw new AppError('CONFLICT', 'Solicitud concurrente, reintente');
           }
           return replay(winner, hash);
+        }
+        // 5) Patrón sospechoso (2.ª donación de S/ 900 o más en 1 h): se crea, pero queda marcada para el AUDITOR.
+        if (flagged) {
+          await recordFlag(event, principal.sub, resourceRef);
         }
         return { statusCode: 201, headers: { 'content-type': 'application/json; charset=utf-8' }, body: responseBody };
       } catch (error) {

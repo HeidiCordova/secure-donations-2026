@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'CONFLICT'
   | 'IDEMPOTENCY_MISMATCH'
   | 'INVALID_TRANSITION'
+  | 'RATE_LIMITED'
   | 'INTERNAL_ERROR';
 
 const STATUS_BY_CODE: Record<ErrorCode, number> = {
@@ -20,6 +21,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   CONFLICT: 409,
   IDEMPOTENCY_MISMATCH: 409,
   INVALID_TRANSITION: 409,
+  RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,
 };
 

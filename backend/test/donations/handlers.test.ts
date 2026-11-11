@@ -66,6 +66,13 @@ class InMemoryDonations implements DonationRepository {
     return Promise.resolve([...this.donations.values()].filter((d) => d.donorSub === donorSub));
   }
 
+  /** Igual que el GSI: mismo donante y createdAt >= since (comparación de texto ISO 8601). */
+  listByDonorSince(donorSub: string, sinceIso: string) {
+    return Promise.resolve(
+      [...this.donations.values()].filter((d) => d.donorSub === donorSub && d.createdAt >= sinceIso),
+    );
+  }
+
   getDonation(donationId: string) {
     return Promise.resolve(this.donations.get(donationId));
   }
@@ -481,5 +488,128 @@ describe('POST /v1/donations/{donationId}/simulate (HU-06)', () => {
     const body = { outcome: 'CONFIRMADA_SIMULADA' };
     expect((await ctx.handlers.simulate(event({ claims: gestor, donationId: MISSING_ID, body }))).statusCode).toBe(403);
     expect((await ctx.handlers.simulate(event({ claims: ana, donationId: MISSING_ID, body }))).statusCode).toBe(404);
+  });
+});
+
+describe('Anti-fraude en POST /v1/donations (límites por hora)', () => {
+  let seq = 0;
+  /** Inserta una donación previa de ana con la antigüedad indicada (en minutos). */
+  function seed(ctx: ReturnType<typeof setup>, amountCents: number, minutesAgo: number, donorSub = 'ana-sub') {
+    const createdAt = new Date(NOW.getTime() - minutesAgo * 60_000).toISOString();
+    const donationId = `bbbbbbbb-bbbb-4bbb-8bbb-${String(++seq).padStart(12, '0')}`;
+    ctx.repo.donations.set(donationId, {
+      donationId,
+      projectId: PUBLISHED_ID,
+      donorSub,
+      amountCents,
+      currency: 'PEN',
+      status: 'PENDIENTE_SIMULACION',
+      createdAt,
+      updatedAt: createdAt,
+    });
+  }
+  const donate = (ctx: ReturnType<typeof setup>, amountCents: number, key = KEY) =>
+    ctx.handlers.create(event({ claims: ana, body: { ...validBody, amountCents }, key }));
+  const flags = (ctx: ReturnType<typeof setup>) => ctx.audit.events.filter((e) => e.action === 'DONATION_FLAGGED');
+
+  it('con 5 donaciones en la última hora, la 6.ª responde 429 RATE_LIMITED y no se crea', async () => {
+    const ctx = setup();
+    for (let i = 0; i < 5; i++) seed(ctx, 1000, 10 + i);
+    const response = await donate(ctx, 1000);
+    expect(response.statusCode).toBe(429);
+    expect(JSON.parse(response.body)).toMatchObject({ code: 'RATE_LIMITED' });
+    expect(ctx.repo.donations.size).toBe(5);
+    expect(ctx.repo.records.size).toBe(0);
+  });
+
+  it('el rechazo por límite queda auditado como DENIED', async () => {
+    const ctx = setup();
+    for (let i = 0; i < 5; i++) seed(ctx, 1000, 10 + i);
+    await donate(ctx, 1000);
+    expect(ctx.audit.events).toMatchObject([{ action: 'DONATION_CREATE', outcome: 'DENIED' }]);
+  });
+
+  it('con 4 donaciones en la última hora, la 5.ª responde 201', async () => {
+    const ctx = setup();
+    for (let i = 0; i < 4; i++) seed(ctx, 1000, 10 + i);
+    const response = await donate(ctx, 1000);
+    expect(response.statusCode).toBe(201);
+    expect(ctx.repo.donations.size).toBe(5);
+  });
+
+  it('S/ 1 900 acumulados + S/ 200 nuevos superan S/ 2 000 → 429', async () => {
+    const ctx = setup();
+    seed(ctx, 100000, 30);
+    seed(ctx, 90000, 20);
+    const response = await donate(ctx, 20000);
+    expect(response.statusCode).toBe(429);
+    expect(ctx.repo.donations.size).toBe(2);
+  });
+
+  it('llegar exactamente a S/ 2 000 está permitido (el límite es "supera")', async () => {
+    const ctx = setup();
+    seed(ctx, 100000, 30);
+    seed(ctx, 90000, 20);
+    expect((await donate(ctx, 10000)).statusCode).toBe(201);
+  });
+
+  it('1 donación de S/ 950 + una nueva de S/ 900 → 201 y DONATION_FLAGGED registrado', async () => {
+    const ctx = setup();
+    seed(ctx, 95000, 30);
+    const response = await donate(ctx, 90000);
+    expect(response.statusCode).toBe(201);
+    const created = JSON.parse(response.body) as Donation;
+    expect(ctx.repo.donations.has(created.donationId)).toBe(true);
+    expect(flags(ctx)).toMatchObject([
+      {
+        action: 'DONATION_FLAGGED',
+        outcome: 'SUCCESS',
+        resourceRef: `donation:${created.donationId}`,
+        actorRef: pseudonymize('ana-sub'),
+      },
+    ]);
+    expect(JSON.stringify(flags(ctx))).not.toContain('ana-sub');
+  });
+
+  it('2 donaciones de S/ 950 + una nueva de S/ 900 → 429 (supera S/ 2 000), sin flag nuevo', async () => {
+    const ctx = setup();
+    seed(ctx, 95000, 30);
+    seed(ctx, 95000, 20);
+    const response = await donate(ctx, 90000);
+    expect(response.statusCode).toBe(429);
+    expect(flags(ctx)).toHaveLength(0);
+    expect(ctx.repo.donations.size).toBe(2);
+  });
+
+  it('1 donación de S/ 500 + una nueva de S/ 900 → 201 sin flag', async () => {
+    const ctx = setup();
+    seed(ctx, 50000, 30);
+    const response = await donate(ctx, 90000);
+    expect(response.statusCode).toBe(201);
+    expect(flags(ctx)).toHaveLength(0);
+  });
+
+  it('un replay con la misma Idempotency-Key teniendo ya 5 donaciones devuelve el 201 guardado, no 429', async () => {
+    const ctx = setup();
+    for (let i = 0; i < 4; i++) seed(ctx, 1000, 10 + i);
+    const first = await donate(ctx, 1000);
+    expect(first.statusCode).toBe(201);
+    expect(ctx.repo.donations.size).toBe(5);
+    const again = await donate(ctx, 1000);
+    expect(again.statusCode).toBe(201);
+    expect(again.body).toBe(first.body);
+    expect(again.headers['idempotent-replayed']).toBe('true');
+  });
+
+  it('las donaciones de hace más de 1 hora no cuentan', async () => {
+    const ctx = setup();
+    for (let i = 0; i < 5; i++) seed(ctx, 100000, 61 + i);
+    expect((await donate(ctx, 100000)).statusCode).toBe(201);
+  });
+
+  it('las donaciones de otro donante no cuentan para ana', async () => {
+    const ctx = setup();
+    for (let i = 0; i < 5; i++) seed(ctx, 1000, 10 + i, 'beto-sub');
+    expect((await donate(ctx, 1000)).statusCode).toBe(201);
   });
 });
