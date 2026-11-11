@@ -25,11 +25,22 @@ interface HistoryPageProps {
 function donationStatusLabel(status: Donation['status']): string {
   switch (status) {
     case 'PENDIENTE_SIMULACION':
-      return 'PENDING';
+      return 'Pendiente de simulación';
     case 'CONFIRMADA_SIMULADA':
-      return 'CONFIRMED';
+      return 'Confirmada (simulada)';
     case 'RECHAZADA_SIMULADA':
-      return 'REJECTED';
+      return 'Rechazada (simulada)';
+  }
+}
+
+function donationStatusBadgeClass(status: Donation['status']): string {
+  switch (status) {
+    case 'PENDIENTE_SIMULACION':
+      return 'bg-amber-100 text-amber-900';
+    case 'CONFIRMADA_SIMULADA':
+      return 'bg-emerald-100 text-emerald-800';
+    case 'RECHAZADA_SIMULADA':
+      return 'bg-red-100 text-red-800';
   }
 }
 
@@ -154,7 +165,13 @@ export function HistoryPage({ onLogin }: HistoryPageProps) {
                   <td className="px-5 py-4">{new Date(donation.createdAt).toLocaleString('es-PE')}</td>
                   <td className="px-5 py-4">{projectTitles.get(donation.projectId) ?? donation.projectId}</td>
                   <td className="px-5 py-4 font-medium">{formatPEN(donation.amountCents)}</td>
-                  <td className="px-5 py-4">{donationStatusLabel(donation.status)}</td>
+                  <td className="px-5 py-4">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${donationStatusBadgeClass(donation.status)}`}
+                    >
+                      {donationStatusLabel(donation.status)}
+                    </span>
+                  </td>
                   <td className="px-5 py-4">
                     <button
                       className="font-semibold text-emerald-800 underline"
@@ -197,7 +214,13 @@ export function HistoryPage({ onLogin }: HistoryPageProps) {
             </div>
             <div>
               <dt className="text-slate-500">Estado</dt>
-              <dd>{donationStatusLabel(detail.status)}</dd>
+              <dd>
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${donationStatusBadgeClass(detail.status)}`}
+                >
+                  {donationStatusLabel(detail.status)}
+                </span>
+              </dd>
             </div>
             <div>
               <dt className="text-slate-500">Creada</dt>

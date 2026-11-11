@@ -12,6 +12,8 @@ interface AuditEvent {
   requestId: string;
   actorRef: string;
   action: AuditEventType;
+  eventType?: AuditEventType;
+  flagged?: boolean;
   resourceRef: string;
   outcome: 'SUCCESS' | 'DENIED' | 'INVALID' | 'NOT_FOUND' | 'CONFLICT' | 'ERROR';
 }
@@ -67,7 +69,16 @@ export function AuditPage({ onLogin }: AuditPageProps) {
               .flatMap(({ items }) => items)
               .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)),
           )
-        : fetchEvents(eventType).then(({ items }) => items);
+        : eventType === 'DONATION_FLAGGED'
+          ? fetchEvents(eventType).then(({ items }) =>
+              items.filter(
+                (event) =>
+                  event.action === 'DONATION_FLAGGED' ||
+                  event.eventType === 'DONATION_FLAGGED' ||
+                  event.flagged === true,
+              ),
+            )
+          : fetchEvents(eventType).then(({ items }) => items);
     void request.then(setEvents).catch((requestError: unknown) => {
       if (!controller.signal.aborted) {
         setError(requestError);

@@ -28,11 +28,22 @@ interface DonationAttempt {
 function donationStatusLabel(status: Donation['status']): string {
   switch (status) {
     case 'PENDIENTE_SIMULACION':
-      return 'PENDING';
+      return 'Pendiente de simulación';
     case 'CONFIRMADA_SIMULADA':
-      return 'CONFIRMED';
+      return 'Confirmada (simulada)';
     case 'RECHAZADA_SIMULADA':
-      return 'REJECTED';
+      return 'Rechazada (simulada)';
+  }
+}
+
+function donationStatusBadgeClass(status: Donation['status']): string {
+  switch (status) {
+    case 'PENDIENTE_SIMULACION':
+      return 'bg-amber-100 text-amber-900';
+    case 'CONFIRMADA_SIMULADA':
+      return 'bg-emerald-100 text-emerald-800';
+    case 'RECHAZADA_SIMULADA':
+      return 'bg-red-100 text-red-800';
   }
 }
 
@@ -243,7 +254,7 @@ export function DonatePage({ onLogin }: DonationPageProps) {
               <header>
                 <h2 className="text-xl font-bold">Comprobante de donación</h2>
                 <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-emerald-800">
-                  ¡Donación procesada!
+                  Intención de donación registrada
                 </p>
               </header>
               <div className="rounded-lg border border-emerald-200 bg-white p-4">
@@ -262,7 +273,9 @@ export function DonatePage({ onLogin }: DonationPageProps) {
                 <div>
                   <dt className="text-emerald-800">Estado</dt>
                   <dd className="mt-1">
-                    <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-900">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 font-semibold ${donationStatusBadgeClass(donation.status)}`}
+                    >
                       {donationStatusLabel(donation.status)}
                     </span>
                   </dd>

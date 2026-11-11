@@ -55,8 +55,9 @@ describe('DonatePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Crear donación simulada' }));
 
     expect(await screen.findByRole('heading', { name: 'Comprobante de donación' })).toBeInTheDocument();
+    expect(screen.getByText('Intención de donación registrada')).toBeInTheDocument();
     expect(screen.getByText('donation-123')).toBeInTheDocument();
-    expect(screen.getByText('PENDING')).toBeInTheDocument();
+    expect(screen.getByText('Pendiente de simulación')).toHaveClass('bg-amber-100', 'text-amber-900');
     expect(screen.getByText(/12\.50/)).toBeInTheDocument();
     expect(screen.getByText('Fecha')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver en Mi Historial' })).toHaveAttribute('href', '/historial');
@@ -70,10 +71,13 @@ describe('DonatePage', () => {
 describe('AuditPage', () => {
   it('consulta todos los tipos y permite filtrar eventos DONATION_FLAGGED', async () => {
     const requestedTypes: string[] = [];
+    const requestedEventTypeParams: string[] = [];
     server.use(
       http.get('https://api.test/academic/v1/audit', ({ request }) => {
-        const type = new URL(request.url).searchParams.get('type') ?? '';
+        const searchParams = new URL(request.url).searchParams;
+        const type = searchParams.get('type') ?? '';
         requestedTypes.push(type);
+        requestedEventTypeParams.push(searchParams.get('eventType') ?? '');
         return HttpResponse.json({
           items:
             type === 'DONATION_FLAGGED'
@@ -86,6 +90,15 @@ describe('AuditPage', () => {
                     action: 'DONATION_FLAGGED',
                     resourceRef: 'donation:123',
                     outcome: 'DENIED',
+                  },
+                  {
+                    eventId: 'not-flagged-1',
+                    timestamp: '2026-11-10T12:29:00.000Z',
+                    requestId: 'request-2',
+                    actorRef: 'actor_456',
+                    action: 'DONATION_CREATE',
+                    resourceRef: 'donation:456',
+                    outcome: 'SUCCESS',
                   },
                 ]
               : [],
@@ -100,9 +113,14 @@ describe('AuditPage', () => {
     expect(requestedTypes).toContain('PROJECT_CREATE');
     expect(requestedTypes).toContain('DONATION_FLAGGED');
 
+    expect(screen.getByRole('option', { name: 'DONATION_FLAGGED' })).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: 'Tipo de evento' }), {
       target: { value: 'DONATION_FLAGGED' },
     });
     await waitFor(() => expect(requestedTypes.at(-1)).toBe('DONATION_FLAGGED'));
+    expect(requestedEventTypeParams).not.toContain('DONATION_FLAGGED');
+    const filteredTable = await screen.findByRole('table');
+    expect(within(filteredTable).getByText('DONATION_FLAGGED')).toBeInTheDocument();
+    expect(within(filteredTable).queryByText('DONATION_CREATE')).not.toBeInTheDocument();
   });
 });
