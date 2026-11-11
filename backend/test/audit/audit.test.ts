@@ -13,6 +13,7 @@ describe('audit', () => {
 
   it.each([
     [new AppError('FORBIDDEN', 'x'), 'DENIED'],
+    [new AppError('RATE_LIMITED', 'x'), 'DENIED'],
     [new AppError('VALIDATION_ERROR', 'x'), 'INVALID'],
     [new AppError('NOT_FOUND', 'x'), 'NOT_FOUND'],
     [new AppError('CONFLICT', 'x'), 'CONFLICT'],

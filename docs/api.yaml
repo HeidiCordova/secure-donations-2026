@@ -157,6 +157,9 @@ paths:
         `donorSub` se toma del access token, nunca del body (CA-05.3).
         Reenviar la misma Idempotency-Key con el mismo body devuelve la misma respuesta 201
         sin crear otra donación; con body distinto devuelve 409 (CA-05.4).
+        Anti-fraude: si el donante ya tiene 5 donaciones en la última hora, o el total de la hora superaría
+        S/ 2 000, responde 429 (RATE_LIMITED). Un reintento con la misma Idempotency-Key no cuenta para el límite.
+        Si con esta serían 2 donaciones de S/ 900 o más en la última hora, se crea y se registra DONATION_FLAGGED.
       security:
         - cognito: [api/donations.write]
       parameters:
@@ -180,6 +183,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /v1/donations/{donationId}/simulate:
     post:
@@ -249,54 +253,54 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
-/v1/audit:
-  get:
-    tags: [audit]
-    summary: Consulta eventos de auditoría por tipo y rango de fechas (HU-10, solo AUDITOR)
-    description: |
-      Solo el grupo AUDITOR (con MFA TOTP) y el scope `api/audit.read` (CA-10.1).
-      Más recientes primero. Si hay más resultados, la respuesta incluye `nextToken` para pedir la página siguiente.
-      Los eventos no incluyen tokens, claves, cuerpos de solicitud ni datos financieros; el actor va seudonimizado (CA-10.2).
-    security:
-      - cognito: [api/audit.read]
-    parameters:
-      - name: type
-        in: query
-        required: true
-        schema:
-          type: string
-          enum: [PROJECT_CREATE, PROJECT_PUBLISH, DONATION_CREATE, DONATION_SIMULATE, DONATION_FLAGGED]
-      - name: from
-        in: query
-        description: Inicio del rango (inclusive), ISO 8601
-        schema: { type: string, format: date-time }
-      - name: to
-        in: query
-        description: Fin del rango (inclusive), ISO 8601
-        schema: { type: string, format: date-time }
-      - name: limit
-        in: query
-        schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
-      - name: nextToken
-        in: query
-        description: Token opaco devuelto por la página anterior (solo válido para el mismo `type`)
-        schema: { type: string, maxLength: 2048 }
-    responses:
-      '200':
-        description: Página de eventos
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [items]
-              properties:
-                items:
-                  type: array
-                  items: { $ref: '#/components/schemas/AuditEvent' }
-                nextToken: { type: string }
-      '400': { $ref: '#/components/responses/BadRequest' }
-      '401': { $ref: '#/components/responses/Unauthorized' }
-      '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/audit:
+    get:
+      tags: [audit]
+      summary: Consulta eventos de auditoría por tipo y rango de fechas (HU-10, solo AUDITOR)
+      description: |
+        Solo el grupo AUDITOR (con MFA TOTP) y el scope `api/audit.read` (CA-10.1).
+        Más recientes primero. Si hay más resultados, la respuesta incluye `nextToken` para pedir la página siguiente.
+        Los eventos no incluyen tokens, claves, cuerpos de solicitud ni datos financieros; el actor va seudonimizado (CA-10.2).
+      security:
+        - cognito: [api/audit.read]
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [PROJECT_CREATE, PROJECT_PUBLISH, DONATION_CREATE, DONATION_SIMULATE, DONATION_FLAGGED]
+        - name: from
+          in: query
+          description: Inicio del rango (inclusive), ISO 8601
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Fin del rango (inclusive), ISO 8601
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: nextToken
+          in: query
+          description: Token opaco devuelto por la página anterior (solo válido para el mismo `type`)
+          schema: { type: string, maxLength: 2048 }
+      responses:
+        '200':
+          description: Página de eventos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditEvent' }
+                  nextToken: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
 components:
   securitySchemes:
@@ -435,6 +439,7 @@ components:
               CONFLICT,
               IDEMPOTENCY_MISMATCH,
               INVALID_TRANSITION,
+              RATE_LIMITED,
               INTERNAL_ERROR,
             ]
         message: { type: string }
@@ -472,6 +477,11 @@ components:
               - $ref: '#/components/schemas/Error'
     NotFound:
       description: No existe o no es visible para el solicitante (sin revelar contenido)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooManyRequests:
+      description: Límite de donaciones por hora alcanzado (code RATE_LIMITED)
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

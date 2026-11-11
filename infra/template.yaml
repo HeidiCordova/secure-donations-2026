@@ -658,6 +658,10 @@ Resources:
             - Effect: Allow
               Action: dynamodb:PutItem
               Resource: !GetAtt DonationsTable.Arn
+            # Anti-fraude: donaciones del donante en la última hora (GSI donorSub-createdAt)
+            - Effect: Allow
+              Action: dynamodb:Query
+              Resource: !Sub '${DonationsTable.Arn}/index/donorSub-createdAt'
             - Effect: Allow
               Action:
                 - dynamodb:GetItem

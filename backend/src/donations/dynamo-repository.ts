@@ -64,6 +64,32 @@ export function createDynamoDonationRepository(config: DynamoDonationRepositoryC
   const projectsTable = () => required(config.projectsTable, 'TABLE_PROJECTS');
   const auditTable = () => required(config.auditTable, 'TABLE_AUDIT');
 
+  /** Consulta paginada del GSI donorSub-createdAt, más recientes primero. */
+  async function queryByDonor(
+    keyConditionExpression: string,
+    expressionAttributeValues: Record<string, string>,
+  ): Promise<Donation[]> {
+    const donations: Donation[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+    do {
+      const page = await client.send(
+        new QueryCommand({
+          TableName: donationsTable,
+          IndexName: DONATIONS_DONOR_INDEX,
+          KeyConditionExpression: keyConditionExpression,
+          ExpressionAttributeValues: expressionAttributeValues,
+          ScanIndexForward: false,
+          ExclusiveStartKey: exclusiveStartKey,
+        }),
+      );
+      for (const item of page.Items ?? []) {
+        donations.push(DonationSchema.parse(item));
+      }
+      exclusiveStartKey = page.LastEvaluatedKey;
+    } while (exclusiveStartKey !== undefined);
+    return donations;
+  }
+
   return {
     async getIdempotencyRecord(pk: string) {
       const result = await client.send(
@@ -140,26 +166,13 @@ export function createDynamoDonationRepository(config: DynamoDonationRepositoryC
       }
     },
 
-    async listByDonor(donorSub: string) {
-      const donations: Donation[] = [];
-      let exclusiveStartKey: Record<string, unknown> | undefined;
-      do {
-        const page = await client.send(
-          new QueryCommand({
-            TableName: donationsTable,
-            IndexName: DONATIONS_DONOR_INDEX,
-            KeyConditionExpression: 'donorSub = :sub',
-            ExpressionAttributeValues: { ':sub': donorSub },
-            ScanIndexForward: false,
-            ExclusiveStartKey: exclusiveStartKey,
-          }),
-        );
-        for (const item of page.Items ?? []) {
-          donations.push(DonationSchema.parse(item));
-        }
-        exclusiveStartKey = page.LastEvaluatedKey;
-      } while (exclusiveStartKey !== undefined);
-      return donations;
+    listByDonor(donorSub: string) {
+      return queryByDonor('donorSub = :sub', { ':sub': donorSub });
+    },
+
+    /** Ventana de tiempo sobre el sort key del GSI: createdAt es ISO 8601, así que comparar texto es comparar fechas. */
+    listByDonorSince(donorSub: string, sinceIso: string) {
+      return queryByDonor('donorSub = :sub AND createdAt >= :since', { ':sub': donorSub, ':since': sinceIso });
     },
 
     async simulateDonation({ donation, outcome, updatedAt, audit }: SimulateDonationWrite): Promise<Donation> {
