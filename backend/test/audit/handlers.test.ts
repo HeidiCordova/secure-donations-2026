@@ -49,6 +49,13 @@ describe('GET /v1/audit (HU-10)', () => {
     expect(reader.queries[0]).toMatchObject({ eventType: 'PROJECT_CREATE', limit: 50 });
   });
 
+  it('un AUDITOR puede consultar eventos DONATION_FLAGGED', async () => {
+    const { handlers, reader } = setup();
+    const response = await handlers.list(event({ type: 'DONATION_FLAGGED' }));
+    expect(response.statusCode).toBe(200);
+    expect(reader.queries[0]).toMatchObject({ eventType: 'DONATION_FLAGGED', limit: 50 });
+  });
+
   it('los eventos solo traen los campos del contrato, sin datos sensibles (CA-10.2)', async () => {
     const { handlers } = setup();
     const body = JSON.parse((await handlers.list(event({ type: 'PROJECT_CREATE' }))).body) as { items: AuditEvent[] };

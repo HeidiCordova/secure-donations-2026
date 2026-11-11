@@ -265,7 +265,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [PROJECT_CREATE, PROJECT_PUBLISH, DONATION_CREATE, DONATION_SIMULATE]
+          enum: [PROJECT_CREATE, PROJECT_PUBLISH, DONATION_CREATE, DONATION_SIMULATE, DONATION_FLAGGED]
       - name: from
         in: query
         description: Inicio del rango (inclusive), ISO 8601
